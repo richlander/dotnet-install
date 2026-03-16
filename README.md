@@ -3,9 +3,9 @@
 Install .NET executables to PATH — like `cargo install` and `go install`.
 
 ```bash
-dotnet install                          # Build & install current project
+dotnet install .                        # Build & install current project
 dotnet install src/my-tool              # Install from subdirectory
-dotnet install -o ~/tools               # Install to custom location
+dotnet install -o ~/tools .             # Install to custom location
 ```
 
 ## Install

@@ -89,19 +89,24 @@ else if (options.UnresolvedArg is not null)
 
     result = GitSource.InstallFromGit(arg, installDir, options.UseSsh, options.ProjectPath);
 }
-else
+else if (options.ProjectPath is not null)
 {
-    // Local project (path or cwd)
-    string projectPath = options.ProjectPath ?? Directory.GetCurrentDirectory();
-    string? projectFile = FindProjectFile(projectPath);
+    // Local project — explicit positional arg (like `docker build .`)
+    string? projectFile = FindProjectFile(options.ProjectPath);
 
     if (projectFile is null)
     {
-        Console.Error.WriteLine($"error: no project file found in '{projectPath}'");
+        Console.Error.WriteLine($"error: no project file found in '{options.ProjectPath}'");
         return 1;
     }
 
     result = Installer.Install(projectFile, installDir);
+}
+else
+{
+    // No source specified — show help
+    PrintUsage();
+    return 0;
 }
 
 if (result == 0)
@@ -206,7 +211,7 @@ static void PrintUsage()
     dotnet install - Install .NET executables to PATH
 
     Usage:
-      dotnet install [project-path] [options]
+      dotnet install <project-path> [options]
       dotnet install --github owner/repo[@ref] [options]
       dotnet install --package <name>[@<version>] [options]
       dotnet install setup
@@ -214,7 +219,7 @@ static void PrintUsage()
       dotnet install remove <tool> [<tool>...]
 
     Arguments:
-      project-path        Path to project file or directory (default: current directory)
+      project-path        Path to project file or directory (e.g. ".")
 
     Source options:
       --github            Install from a GitHub repository (owner/repo[@ref])
@@ -237,7 +242,7 @@ static void PrintUsage()
       remove <tool>...      Remove installed tools
 
     Examples:
-      dotnet install                                   Install current project
+      dotnet install .                                  Install current project
       dotnet install src/my-tool                       Install from subdirectory
       dotnet install --github richlander/dotnet-inspect Install from GitHub
       dotnet install --github richlander/dotnet-inspect@v1.0
