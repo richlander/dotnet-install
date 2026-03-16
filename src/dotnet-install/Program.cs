@@ -1,3 +1,24 @@
+// --- Runtime host dispatch ---
+// When invoked via a symlink (BusyBox model), the invocation name differs
+// from "dotnet-install". Detect this and dispatch to the managed tool.
+
+string invocationName = Path.GetFileNameWithoutExtension(
+    Environment.GetCommandLineArgs()[0]);
+
+if (invocationName != "dotnet-install" && !invocationName.StartsWith("dotnet-install."))
+{
+    return HostDispatch.Run(invocationName, args);
+}
+
+// --- Explicit host mode (Windows .cmd shims) ---
+
+if (args is ["--host", _, ..])
+{
+    string toolName = args[1];
+    string[] toolArgs = args[2..];
+    return HostDispatch.Run(toolName, toolArgs);
+}
+
 // --- Route subcommands ---
 
 if (args is ["list", ..])
@@ -30,7 +51,7 @@ int result;
 if (options.PackageSpec is not null)
 {
     // Explicit: --package
-    result = await Installer.InstallPackageAsync(options.PackageSpec, installDir);
+    result = await Installer.InstallPackageAsync(options.PackageSpec, installDir, options.AllowRollForward);
 }
 else if (options.GitSpec is not null)
 {
@@ -127,6 +148,7 @@ static Options ParseOptions(string[] args)
     bool useSsh = false;
     bool showHelp = false;
     bool showVersion = false;
+    bool allowRollForward = false;
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -150,6 +172,9 @@ static Options ParseOptions(string[] args)
             case "--local-bin":
                 useLocalBin = true;
                 break;
+            case "--allow-roll-forward":
+                allowRollForward = true;
+                break;
             case "-h" or "--help":
                 showHelp = true;
                 break;
@@ -169,7 +194,7 @@ static Options ParseOptions(string[] args)
         }
     }
 
-    return new(projectPath, packageSpec, gitSpec, unresolvedArg, outputDir, useLocalBin, useSsh, showHelp, showVersion);
+    return new(projectPath, packageSpec, gitSpec, unresolvedArg, outputDir, useLocalBin, useSsh, showHelp, showVersion, allowRollForward);
 }
 
 static void PrintUsage()
@@ -195,6 +220,7 @@ static void PrintUsage()
 
     Install options:
       --local-bin         Install to ~/.local/bin/ instead of ~/.dotnet/bin/
+      --allow-roll-forward Allow tool to run on a newer .NET runtime version
       -o, --output        Installation directory (overrides default and --local-bin)
 
     Other:
@@ -208,6 +234,7 @@ static void PrintUsage()
       dotnet install --github richlander/dotnet-inspect@v1.0
       dotnet install richlander/dotnet-inspect         Prompts to confirm GitHub
       dotnet install --package dotnet-counters          Install a NuGet tool
+      dotnet install --package dotnet-counters --allow-roll-forward
       dotnet install list                              List installed tools
       dotnet install remove my-tool                    Remove a tool
     """);
@@ -222,4 +249,5 @@ record Options(
     bool UseLocalBin,
     bool UseSsh,
     bool ShowHelp,
-    bool ShowVersion);
+    bool ShowVersion,
+    bool AllowRollForward);

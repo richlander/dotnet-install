@@ -6,6 +6,7 @@
 
     <PackAsTool>true</PackAsTool>
     <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ToolCommandName>dotnet-install</ToolCommandName>
     <PackageId>dotnet-install</PackageId>
     <Version>0.1.0</Version>
