@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        id: filter
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=${{ github.event.pull_request.base.sha }}
+          else
+            BASE=${{ github.event.before }}
+          fi
+
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "docs=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE"..HEAD)
+
+          code=false
+          docs=false
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              src/*|*.props|.github/workflows/*) code=true ;;
+            esac
+            case "$file" in
+              *.md|docs/*) docs=true ;;
+            esac
+          done <<< "$CHANGED"
+
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+  markdownlint:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Run markdownlint
+        run: npx markdownlint-cli2 '**/*.md'
+
+  build:
+    needs: [changes, markdownlint]
+    if: always() && needs.changes.outputs.code == 'true' && needs.markdownlint.result != 'failure'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dotnet-install
+
+      - name: Checkout nuget-fetch dependency
+        uses: actions/checkout@v6
+        with:
+          repository: richlander/nuget-fetch
+          path: nuget-fetch
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Build
+        run: dotnet build dotnet-install/src/dotnet-install -c Release
+
+      - name: Smoke test
+        run: |
+          dotnet run --project dotnet-install/src/dotnet-install -c Release -- --version
+          dotnet run --project dotnet-install/src/dotnet-install -c Release -- --help
+
+  pack:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dotnet-install
+
+      - name: Checkout nuget-fetch dependency
+        uses: actions/checkout@v6
+        with:
+          repository: richlander/nuget-fetch
+          path: nuget-fetch
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Pack
+        run: dotnet pack dotnet-install/src/dotnet-install -c Release
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: dotnet-install/artifacts/package/release/*.nupkg

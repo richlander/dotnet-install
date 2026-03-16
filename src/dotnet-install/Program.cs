@@ -10,6 +10,12 @@ if (args is ["remove", ..])
 
 var options = ParseOptions(args);
 
+if (options.ShowVersion)
+{
+    Console.WriteLine($"dotnet-install {typeof(Options).Assembly.GetName().Version}");
+    return 0;
+}
+
 if (options.ShowHelp)
 {
     PrintUsage();
@@ -120,6 +126,7 @@ static Options ParseOptions(string[] args)
     bool useLocalBin = false;
     bool useSsh = false;
     bool showHelp = false;
+    bool showVersion = false;
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -146,6 +153,9 @@ static Options ParseOptions(string[] args)
             case "-h" or "--help":
                 showHelp = true;
                 break;
+            case "--version":
+                showVersion = true;
+                break;
             default:
                 if (!args[i].StartsWith('-'))
                 {
@@ -159,7 +169,7 @@ static Options ParseOptions(string[] args)
         }
     }
 
-    return new(projectPath, packageSpec, gitSpec, unresolvedArg, outputDir, useLocalBin, useSsh, showHelp);
+    return new(projectPath, packageSpec, gitSpec, unresolvedArg, outputDir, useLocalBin, useSsh, showHelp, showVersion);
 }
 
 static void PrintUsage()
@@ -189,6 +199,7 @@ static void PrintUsage()
 
     Other:
       -h, --help          Show this help
+      --version           Show version
 
     Examples:
       dotnet install                                   Install current project
@@ -210,4 +221,5 @@ record Options(
     string? OutputDir,
     bool UseLocalBin,
     bool UseSsh,
-    bool ShowHelp);
+    bool ShowHelp,
+    bool ShowVersion);
