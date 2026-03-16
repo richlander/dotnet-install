@@ -8,6 +8,50 @@ dotnet install src/my-tool              # Install from subdirectory
 dotnet install -o ~/tools               # Install to custom location
 ```
 
+## Install
+
+### SDK users
+
+```bash
+dotnet tool install -g dotnet-install
+dotnet install setup
+```
+
+### Without the SDK
+
+Unix:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf \
+  https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1 | iex
+```
+
+The script downloads a platform-specific binary and runs
+`dotnet-install setup` to configure your shell.
+
+### Manual setup
+
+If `~/.dotnet/bin` is not in your PATH after installing, run:
+
+```bash
+dotnet install setup
+```
+
+This will:
+
+1. Create a symlink from `~/.dotnet/bin/dotnet-install`
+   to the tool's location (if needed)
+2. Add `~/.dotnet/bin` to your shell PATH
+   (bash, zsh, or fish)
+
+Ensure `~/.dotnet/bin` is on your PATH.
+
 ## What it does
 
 `dotnet install` performs two operations:
@@ -38,41 +82,6 @@ or CMD shim (Windows) on PATH:
     otherapp.deps.json
     ...
 ```
-
-## Install
-
-### SDK users
-
-```bash
-dotnet tool install -g dotnet-install
-dotnet install setup
-```
-
-### Without the SDK
-
-```bash
-curl -sSf https://dotnet.ms/install | bash
-```
-
-The script downloads a platform-specific binary and runs
-`dotnet-install setup` to configure your shell.
-
-### Manual setup
-
-If `~/.dotnet/bin` is not in your PATH after installing, run:
-
-```bash
-dotnet install setup
-```
-
-This will:
-
-1. Create a symlink from `~/.dotnet/bin/dotnet-install`
-   to the tool's location (if needed)
-2. Add `~/.dotnet/bin` to your shell PATH
-   (bash, zsh, or fish)
-
-Ensure `~/.dotnet/bin` is on your PATH.
 
 ## Project configuration
 
