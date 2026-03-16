@@ -17,4 +17,8 @@
     <ProjectReference Include="../../../nuget-fetch/src/NuGetFetch/NuGetFetch.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="dotnet-install.Tests" />
+  </ItemGroup>
+
 </Project>
