@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Xml.Linq;
-using DotnetInspector.Packages;
 using System.Runtime.InteropServices;
+using NuGetFetch;
 
 static class Installer
 {
@@ -85,26 +85,67 @@ static class Installer
     public static async Task<int> InstallPackageAsync(string packageSpec, string installDir)
     {
         // Parse name[@version]
-        var (packageName, version) = PackageExtractor.ParsePackageReference(packageSpec);
+        var parsed = PackageExtractor.ParsePackageReference(packageSpec);
+        if (parsed is null)
+        {
+            Console.Error.WriteLine($"  error: invalid package reference '{packageSpec}'");
+            return 1;
+        }
+
+        string packageName = parsed.Id;
+        string? version = string.IsNullOrEmpty(parsed.Version) ? null : parsed.Version;
 
         Console.WriteLine($"  Installing {packageName}{(version is not null ? $" ({version})" : "")} to {installDir}");
         Console.WriteLine("  Downloading...");
 
-        // Download and extract the .nupkg directly via NuGet V3 API
-        NuGetCache.Initialize("dotnet-install");
         using var client = new HttpClient();
+        var nuget = new NuGetClient(client);
+        var cache = new PackageCache("dotnet-install");
 
-        var outcome = await PackageExtractor.ExtractPackageAsync(
-            client, packageSpec, log: msg => Console.WriteLine($"  {msg}"));
-
-        if (!outcome.IsSuccess)
+        // Resolve version if not specified
+        if (version is null)
         {
-            Console.Error.WriteLine($"  error: {outcome.ErrorMessage}");
-            return 1;
+            version = await nuget.GetLatestVersionAsync(packageName);
+            if (version is null)
+            {
+                Console.Error.WriteLine($"  error: package '{packageName}' not found");
+                return 1;
+            }
         }
 
-        var result = outcome.Result!;
-        string extractPath = result.ExtractPath;
+        // Check cache first
+        string? cachedPath = cache.TryGet(packageName, version);
+        string extractPath;
+
+        if (cachedPath is not null)
+        {
+            Console.WriteLine($"  Using cached {packageName} {version}");
+            extractPath = cachedPath;
+        }
+        else
+        {
+            // Download and extract
+            try
+            {
+                using var stream = await nuget.DownloadAsync(packageName, version);
+                string tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-install-{Path.GetRandomFileName()}");
+                Directory.CreateDirectory(tempDir);
+                extractPath = await PackageExtractor.ExtractAsync(stream, tempDir);
+                
+                // Cache the extracted package
+                string? finalPath = cache.Cache(packageName, version, extractPath);
+                if (finalPath is not null)
+                {
+                    try { Directory.Delete(extractPath, true); } catch { }
+                    extractPath = finalPath;
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.Error.WriteLine($"  error: failed to download {packageName}@{version}: {ex.Message}");
+                return 1;
+            }
+        }
 
         try
         {
@@ -139,7 +180,7 @@ static class Installer
                 if (Directory.Exists(appDir))
                     Directory.Delete(appDir, true);
 
-                Directory.Move(toolDir, appDir);
+                CopyDirectory(toolDir, appDir);
 
                 if (isNative)
                 {
@@ -154,18 +195,13 @@ static class Installer
                 }
             }
 
-            string versionDisplay = result.Version is not null ? $" ({result.Version})" : "";
+            string versionDisplay = version is not null ? $" ({version})" : "";
             Console.WriteLine($"  Installed {commandName}{versionDisplay} → {Path.Combine(installDir, commandName)}");
             return 0;
         }
         finally
         {
-            // Clean up temp dir if not cached
-            if (result.TempDir is not null)
-            {
-                try { Directory.Delete(result.TempDir, true); }
-                catch { /* best-effort */ }
-            }
+            // extractPath is now in the cache, no temp cleanup needed
         }
     }
 
