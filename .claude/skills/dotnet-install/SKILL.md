@@ -1,24 +1,35 @@
 ---
 name: dotnet-install
-description: Build, install, list, and remove .NET tools using dotnet-install. Use when the user wants to install a .NET tool from source (local project or GitHub repo), install a NuGet tool package, list installed tools, or remove tools. Triggers on phrases like "install this tool", "install from GitHub", "list installed tools", "remove tool", or references to dotnet-install commands.
-argument-hint: [owner/repo | path | --package name | list | remove name]
+description: >
+  Build, install, list, and remove .NET tools
+  using dotnet-install.
+argument-hint: >
+  [owner/repo | path | --package name
+  | list | remove name]
 allowed-tools: Bash, Read, Glob, Grep
 ---
 
 # dotnet-install
 
-You are helping the user work with `dotnet-install`, a tool that installs .NET executables to PATH — like `cargo install` and `go install`.
+You are helping the user work with `dotnet-install`,
+a tool that installs .NET executables to PATH
+— like `cargo install` and `go install`.
 
 ## Project structure
 
-The tool lives at `src/dotnet-install/` in this repository:
+The tool lives at `src/dotnet-install/` in this repo:
 
-- `Program.cs` — CLI entry point, argument parsing, subcommand routing
-- `Installer.cs` — Core install logic: project evaluation, `dotnet publish`, single/multi-file placement
-- `GitSource.cs` — Git clone/fetch from GitHub repos, project discovery, `.dotnet-install.json` manifest
-- `ShellHint.cs` — PATH detection and shell-specific setup instructions
-- `ListCommand.cs` — Lists installed tools in `~/.dotnet/bin/`
-- `RemoveCommand.cs` — Removes installed tools and their supporting files
+- `Program.cs` — CLI entry point, argument parsing,
+  subcommand routing
+- `Installer.cs` — Core install logic: project eval,
+  `dotnet publish`, single/multi-file placement
+- `GitSource.cs` — Git clone/fetch from GitHub repos,
+  project discovery, `.dotnet-install.json` manifest
+- `ShellHint.cs` — PATH detection and shell-specific
+  setup instructions
+- `SetupCommand.cs` — Shell PATH config and self-link
+- `ListCommand.cs` — Lists installed tools
+- `RemoveCommand.cs` — Removes installed tools
 
 ## Three install modes
 
@@ -43,7 +54,9 @@ dotnet install --github richlander/dotnet-inspect --ssh
 dotnet install --github richlander/dotnet-inspect --project src/Tool/Tool.csproj
 ```
 
-If the user types `owner/repo` without `--github`, the tool prompts for confirmation before cloning (anti-typosquatting).
+If the user types `owner/repo` without `--github`,
+the tool prompts for confirmation before cloning
+(anti-typosquatting).
 
 ### 3. NuGet package
 
@@ -63,13 +76,23 @@ dotnet install remove <tool>     # remove one or more tools
 
 ## Key design decisions
 
-- **Install directory**: `~/.dotnet/bin/` (configurable with `-o` or `--local-bin` for `~/.local/bin/`)
-- **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/` — persistent clone, `git fetch` on re-install
-- **Single-file binaries** (Native AOT): copied directly to install dir
-- **Multi-file binaries**: stored in `_<appname>/` subdirectory with a symlink (Unix) or `.cmd` shim (Windows)
-- **Project discovery for git repos**: `--project` flag > `.dotnet-install.json` manifest > auto-detect single Exe project (excludes test projects)
-- **Source flags**: `--github`, `--package`, and local path are explicit; bare `owner/repo` triggers a confirmation prompt
-- **Cross-platform**: Unix uses symlinks and `chmod`; Windows uses `.cmd` shims and `.exe` detection
+- **Install directory**: `~/.dotnet/bin/`
+  (configurable with `-o` or `--local-bin`)
+- **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
+  — persistent clone, `git fetch` on re-install
+- **Single-file binaries** (Native AOT):
+  copied directly to install dir
+- **Multi-file binaries**: stored in `_<appname>/`
+  subdirectory with a symlink (Unix) or
+  `.cmd` shim (Windows)
+- **Project discovery for git repos**: `--project`
+  flag > `.dotnet-install.json` manifest >
+  auto-detect single Exe project (no test projects)
+- **Source flags**: `--github`, `--package`, and
+  local path are explicit; bare `owner/repo`
+  triggers a confirmation prompt
+- **Cross-platform**: Unix uses symlinks and `chmod`;
+  Windows uses `.cmd` shims and `.exe` detection
 
 ## When building or running the tool
 
@@ -85,9 +108,16 @@ dotnet run --project src/dotnet-install/dotnet-install.csproj -- <args>
 
 ## When modifying the tool
 
-- Follow the existing code patterns (manual arg parsing, static classes, top-level statements)
-- The project targets `net11.0` with `PublishAot=true` — all code must be AOT-compatible
-- Use STJ source generation for any JSON serialization (see `ManifestContext` in `GitSource.cs`)
-- Error messages use the format `"  error: <message>"` (two-space indent, lowercase)
-- Status messages use `"  <message>"` (two-space indent)
-- Test with all three install modes and both `list`/`remove` subcommands
+- Follow the existing code patterns (manual arg
+  parsing, static classes, top-level statements)
+- The project targets `net11.0` with
+  `PublishAot=true` — all code must be AOT-compatible
+- Use STJ source generation for any JSON
+  serialization (see `ManifestContext` in
+  `GitSource.cs`)
+- Error messages: `"  error: <message>"`
+  (two-space indent, lowercase)
+- Status messages: `"  <message>"`
+  (two-space indent)
+- Test with all three install modes and both
+  `list`/`remove` subcommands
