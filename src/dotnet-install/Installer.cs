@@ -26,6 +26,10 @@ static class Installer
         string mode = info.IsNativeAot ? "Native AOT" :
                       info.IsSingleFile ? "single-file" : "framework-dependent";
 
+        // Pre-flight: warn if the project's TFM may not be buildable
+        if (info.TargetFramework is not null)
+            CheckSdkCompatibility(info.TargetFramework);
+
         Console.WriteLine($"  Installing {appName} to {installDir}");
         Console.WriteLine($"  Publishing ({mode}, Release)...");
 
@@ -82,7 +86,7 @@ static class Installer
 
     // ---- Package install ----
 
-    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir)
+    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir, bool allowRollForward = false)
     {
         // Parse name[@version]
         var parsed = PackageExtractor.ParsePackageReference(packageSpec);
@@ -189,9 +193,46 @@ static class Installer
                 }
                 else
                 {
-                    // Managed: create a launcher script that calls dotnet exec
+                    // Managed tool: check runtime compat, write metadata, create host symlink
                     string entryDll = toolInfo.EntryPoint;
-                    CreateManagedLauncher(installDir, appDir, commandName, entryDll);
+                    string? runtimeConfigPath = FindRuntimeConfig(appDir, commandName);
+
+                    if (runtimeConfigPath is not null)
+                    {
+                        var compat = RuntimeCompat.CheckCompatibility(runtimeConfigPath);
+                        if (!compat.CanRun)
+                        {
+                            if (compat.RollForwardWouldHelp && !allowRollForward)
+                            {
+                                Console.Error.WriteLine($"  error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
+                                Console.Error.WriteLine();
+                                Console.Error.WriteLine("  This can be resolved by:");
+                                Console.Error.WriteLine($"    dotnet install --package {packageSpec} --allow-roll-forward");
+                                Console.Error.WriteLine($"    Install .NET {compat.RequiredVersion}: https://dot.net/download");
+                                return 1;
+                            }
+
+                            if (!compat.RollForwardWouldHelp)
+                            {
+                                Console.Error.WriteLine($"  error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
+                                Console.Error.WriteLine();
+                                Console.Error.WriteLine("  To resolve this:");
+                                Console.Error.WriteLine($"    Install .NET {compat.RequiredVersion}: https://dot.net/download");
+                                return 1;
+                            }
+
+                            // allowRollForward is true and roll-forward would help — proceed
+                        }
+                    }
+
+                    // Write tool metadata sidecar
+                    ToolMetadata.Write(appDir, new ToolManifest
+                    {
+                        EntryPoint = entryDll,
+                        RollForward = allowRollForward
+                    });
+
+                    CreateManagedLauncher(installDir, appDir, commandName, entryDll, allowRollForward);
                 }
             }
 
@@ -209,46 +250,120 @@ static class Installer
 
     static ToolSettings? FindToolSettings(string extractPath)
     {
-        // Search for DotnetToolSettings.xml in the tools/ directory hierarchy
-        foreach (var settingsFile in Directory.GetFiles(extractPath, "DotnetToolSettings.xml", SearchOption.AllDirectories))
-        {
-            var doc = System.Xml.Linq.XDocument.Load(settingsFile);
-            var command = doc.Descendants("Command").FirstOrDefault();
+        // NuGet tool packages use the layout: tools/<tfm>/<rid>/DotnetToolSettings.xml
+        // We need to select the right RID and prefer the highest compatible TFM.
+        string rid = RuntimeInformation.RuntimeIdentifier;
+        var ridFallbacks = GetRidFallbacks(rid);
 
-            if (command is not null)
+        var candidates = Directory.GetFiles(extractPath, "DotnetToolSettings.xml", SearchOption.AllDirectories)
+            .Select(f =>
             {
-                return new ToolSettings(
-                    CommandName: command.Attribute("Name")?.Value ?? "",
-                    EntryPoint: command.Attribute("EntryPoint")?.Value ?? "",
-                    Runner: command.Attribute("Runner")?.Value ?? "",
-                    ToolDirectory: Path.GetDirectoryName(settingsFile)!);
-            }
-        }
+                var doc = System.Xml.Linq.XDocument.Load(f);
+                var command = doc.Descendants("Command").FirstOrDefault();
+                if (command is null) return null;
 
-        return null;
+                string dir = Path.GetDirectoryName(f)!;
+                string dirRid = Path.GetFileName(dir);
+                string? parentDir = Path.GetDirectoryName(dir);
+                string dirTfm = parentDir is not null ? Path.GetFileName(parentDir) : "";
+
+                // Score: lower RID index = better match, parse TFM for version ordering
+                int ridIndex = ridFallbacks.IndexOf(dirRid);
+                if (ridIndex < 0) return null; // incompatible RID
+
+                return new
+                {
+                    Settings = new ToolSettings(
+                        CommandName: command.Attribute("Name")?.Value ?? "",
+                        EntryPoint: command.Attribute("EntryPoint")?.Value ?? "",
+                        Runner: command.Attribute("Runner")?.Value ?? "",
+                        ToolDirectory: dir),
+                    RidPriority = ridIndex,
+                    Tfm = dirTfm
+                };
+            })
+            .Where(c => c is not null)
+            .OrderBy(c => c!.RidPriority)
+            .ThenByDescending(c => c!.Tfm, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return candidates.FirstOrDefault()?.Settings;
     }
 
-    static void CreateManagedLauncher(string installDir, string appDir, string commandName, string entryDll)
+    /// <summary>
+    /// Simplified RID fallback chain. Exact match → portable os-arch → os → unix/win → any.
+    /// </summary>
+    static List<string> GetRidFallbacks(string rid)
     {
-        string appDirName = $"_{commandName}";
+        // e.g. rid = "osx-arm64"
+        var fallbacks = new List<string> { rid };
 
+        // Split into os and arch parts
+        int dash = rid.IndexOf('-');
+        if (dash > 0)
+        {
+            string os = rid[..dash];
+            // Add os-only portable RID (e.g. "osx")
+            // Don't add if it's the same as the full RID
+            if (os != rid)
+                fallbacks.Add(os);
+
+            // Add base platform
+            string basePlatform = os switch
+            {
+                "osx" or "maccatalyst" or "ios" or "tvos" => "unix",
+                "linux" or "freebsd" or "illumos" or "solaris" or "android" or "browser" or "wasi" => "unix",
+                "win" or "win10" => "win",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(basePlatform) && basePlatform != os)
+                fallbacks.Add(basePlatform);
+        }
+
+        fallbacks.Add("any");
+        return fallbacks;
+    }
+
+    static void CreateManagedLauncher(string installDir, string appDir, string commandName, string entryDll, bool rollForward)
+    {
         if (OperatingSystem.IsWindows())
         {
+            // Windows: .cmd shim that delegates to dotnet-install in host mode
             string shimPath = Path.Combine(installDir, $"{commandName}.cmd");
-            File.WriteAllText(shimPath, $"""@dotnet exec "%~dp0\{appDirName}\{entryDll}" %*{"\r\n"}""");
+            string dotnetInstallPath = Environment.ProcessPath ?? "dotnet-install";
+            File.WriteAllText(shimPath, $"""@"{dotnetInstallPath}" --host {commandName} %*{"\r\n"}""");
         }
         else
         {
-            // Place launcher script directly in bin dir (not a symlink — it needs
-            // to resolve its own directory to find the DLL)
-            string launcherPath = Path.Combine(installDir, commandName);
-            if (File.Exists(launcherPath) || IsSymlink(launcherPath))
-                File.Delete(launcherPath);
+            // Unix: symlink to dotnet-install binary (BusyBox model)
+            string linkPath = Path.Combine(installDir, commandName);
+            if (File.Exists(linkPath) || IsSymlink(linkPath))
+                File.Delete(linkPath);
 
-            File.WriteAllText(launcherPath,
-                $"#!/bin/sh\nDIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nexec dotnet exec \"$DIR/{appDirName}/{entryDll}\" \"$@\"\n");
-            SetExecutable(launcherPath);
+            string hostPath = Environment.ProcessPath
+                ?? Path.Combine(installDir, "dotnet-install");
+
+            // Create relative symlink if both are in the same directory
+            string hostDir = Path.GetDirectoryName(hostPath)!;
+            string target = string.Equals(Path.GetFullPath(hostDir), Path.GetFullPath(installDir), StringComparison.Ordinal)
+                ? Path.GetFileName(hostPath)
+                : hostPath;
+
+            File.CreateSymbolicLink(linkPath, target);
         }
+    }
+
+    /// <summary>
+    /// Find the runtimeconfig.json for a tool in its app directory.
+    /// </summary>
+    static string? FindRuntimeConfig(string appDir, string commandName)
+    {
+        // Try exact name first, then search
+        string exact = Path.Combine(appDir, $"{commandName}.runtimeconfig.json");
+        if (File.Exists(exact)) return exact;
+
+        var configs = Directory.GetFiles(appDir, "*.runtimeconfig.json");
+        return configs.Length > 0 ? configs[0] : null;
     }
 
     static void CreateLink(string installDir, string appDir, string appName, string execName)
@@ -274,7 +389,7 @@ static class Installer
     // Parses the .csproj directly instead of using the MSBuild API.
     // This avoids assembly loading conflicts and is fully Native AOT compatible.
 
-    record ProjectInfo(string AssemblyName, string OutputType, bool IsNativeAot, bool IsSingleFile);
+    record ProjectInfo(string AssemblyName, string OutputType, bool IsNativeAot, bool IsSingleFile, string? TargetFramework);
 
     static ProjectInfo EvaluateProject(string projectFile)
     {
@@ -290,7 +405,8 @@ static class Installer
             AssemblyName: assemblyName,
             OutputType: GetProperty(props, "OutputType") ?? "Library",
             IsNativeAot: IsPropertyTrue(props, "PublishAot"),
-            IsSingleFile: IsPropertyTrue(props, "PublishSingleFile")
+            IsSingleFile: IsPropertyTrue(props, "PublishSingleFile"),
+            TargetFramework: GetProperty(props, "TargetFramework")
         );
     }
 
@@ -303,6 +419,39 @@ static class Installer
     static bool IsExecutable(string outputType) =>
         outputType.Equals("Exe", StringComparison.OrdinalIgnoreCase) ||
         outputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Warn if the project's TFM is newer than the installed SDK.
+    /// e.g. project targets net12.0 but only net11.0 SDK is installed.
+    /// </summary>
+    static void CheckSdkCompatibility(string tfm)
+    {
+        // Parse TFM: "net8.0", "net11.0-windows", etc.
+        if (!tfm.StartsWith("net", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        string versionPart = tfm[3..];
+        int dashIndex = versionPart.IndexOf('-');
+        if (dashIndex > 0)
+            versionPart = versionPart[..dashIndex];
+
+        if (!Version.TryParse(versionPart, out var tfmVersion))
+            return;
+
+        // Get installed SDK version
+        var runtimes = RuntimeCompat.GetInstalledRuntimes();
+        var highestRuntime = runtimes
+            .Where(r => r.Name == "Microsoft.NETCore.App")
+            .Select(r => Version.TryParse(r.Version, out var v) ? v : null)
+            .Where(v => v is not null)
+            .Max();
+
+        if (highestRuntime is not null && tfmVersion.Major > highestRuntime.Major)
+        {
+            Console.Error.WriteLine($"  warning: project targets {tfm} but the highest installed runtime is {highestRuntime.Major}.{highestRuntime.Minor}");
+            Console.Error.WriteLine($"  The build will likely fail. Install .NET {tfmVersion}: https://dot.net/download");
+        }
+    }
 
     // ---- Publish (out-of-process) ----
 
