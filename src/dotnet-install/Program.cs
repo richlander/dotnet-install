@@ -27,6 +27,9 @@ if (args is ["list", ..])
 if (args is ["remove", ..])
     return RemoveCommand.Run(Installer.DefaultInstallDir, args[1..]);
 
+if (args is ["setup", ..])
+    return SetupCommand.Run(Installer.DefaultInstallDir);
+
 // --- Default: install ---
 
 var options = ParseOptions(args);
@@ -206,6 +209,7 @@ static void PrintUsage()
       dotnet install [project-path] [options]
       dotnet install --github owner/repo[@ref] [options]
       dotnet install --package <name>[@<version>] [options]
+      dotnet install setup
       dotnet install list
       dotnet install remove <tool> [<tool>...]
 
@@ -227,6 +231,11 @@ static void PrintUsage()
       -h, --help          Show this help
       --version           Show version
 
+    Commands:
+      setup                 Configure shell PATH and create self-link
+      list                  List installed tools
+      remove <tool>...      Remove installed tools
+
     Examples:
       dotnet install                                   Install current project
       dotnet install src/my-tool                       Install from subdirectory
@@ -235,6 +244,7 @@ static void PrintUsage()
       dotnet install richlander/dotnet-inspect         Prompts to confirm GitHub
       dotnet install --package dotnet-counters          Install a NuGet tool
       dotnet install --package dotnet-counters --allow-roll-forward
+      dotnet install setup                             Configure shell and PATH
       dotnet install list                              List installed tools
       dotnet install remove my-tool                    Remove a tool
     """);
