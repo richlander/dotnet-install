@@ -63,31 +63,58 @@ else if (options.GitSpec is not null)
 }
 else if (options.UnresolvedArg is not null)
 {
-    // Positional arg that isn't a local path — prompt before reaching out to GitHub
     string arg = options.UnresolvedArg;
-    string url = options.UseSsh
-        ? $"git@github.com:{arg.Split('@')[0]}.git"
-        : $"https://github.com/{arg.Split('@')[0]}";
 
-    if (!Console.IsInputRedirected)
+    if (arg.Contains('/'))
     {
-        Console.Write($"  '{arg}' is not a local path. Clone from {url}? [Y/n] ");
-        var key = Console.ReadKey(intercept: true);
-        Console.WriteLine();
+        // owner/repo pattern — prompt before cloning from GitHub
+        string url = options.UseSsh
+            ? $"git@github.com:{arg.Split('@')[0]}.git"
+            : $"https://github.com/{arg.Split('@')[0]}";
 
-        if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
+        if (!Console.IsInputRedirected)
         {
-            Console.WriteLine("  Cancelled.");
+            Console.Write($"  '{arg}' is not a local path. Clone from {url}? [Y/n] ");
+            var key = Console.ReadKey(intercept: true);
+            Console.WriteLine();
+
+            if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
+            {
+                Console.WriteLine("  Cancelled.");
+                return 1;
+            }
+        }
+        else
+        {
+            Console.Error.WriteLine($"  '{arg}' is not a local path. Use --github to install from GitHub in non-interactive mode.");
             return 1;
         }
+
+        result = GitSource.InstallFromGit(arg, installDir, options.UseSsh, options.ProjectPath);
     }
     else
     {
-        Console.Error.WriteLine($"  '{arg}' is not a local path. Use --github to install from GitHub in non-interactive mode.");
-        return 1;
-    }
+        // Bare name — prompt before installing from NuGet
+        if (!Console.IsInputRedirected)
+        {
+            Console.Write($"  '{arg}' is not a local path. Install from NuGet? [Y/n] ");
+            var key = Console.ReadKey(intercept: true);
+            Console.WriteLine();
 
-    result = GitSource.InstallFromGit(arg, installDir, options.UseSsh, options.ProjectPath);
+            if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
+            {
+                Console.WriteLine("  Cancelled.");
+                return 1;
+            }
+        }
+        else
+        {
+            Console.Error.WriteLine($"  '{arg}' is not a local path. Use --package to install from NuGet in non-interactive mode.");
+            return 1;
+        }
+
+        result = await Installer.InstallPackageAsync(arg, installDir, options.AllowRollForward);
+    }
 }
 else if (options.ProjectPath is not null)
 {
