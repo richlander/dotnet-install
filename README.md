@@ -51,7 +51,8 @@ dotnet install setup
 ### Without the SDK
 
 ```bash
-curl -sSf https://dotnet.ms/install | bash
+curl -sSf https://richlander.github.io/\
+dotnet-install/install.sh | bash
 ```
 
 The script downloads a platform-specific binary and runs
