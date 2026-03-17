@@ -128,20 +128,43 @@ static class Installer
         }
         else
         {
-            // Download and extract
+            // Download, verify signature, and extract
             try
             {
-                using var stream = await nuget.DownloadAsync(packageName, version);
-                string tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-install-{Path.GetRandomFileName()}");
-                Directory.CreateDirectory(tempDir);
-                extractPath = await PackageExtractor.ExtractAsync(stream, tempDir);
-                
-                // Cache the extracted package
-                string? finalPath = cache.Cache(packageName, version, extractPath);
-                if (finalPath is not null)
+                string nupkgPath = Path.Combine(Path.GetTempPath(), $"dotnet-install-{Path.GetRandomFileName()}.nupkg");
+                await nuget.DownloadToFileAsync(packageName, version, nupkgPath);
+
+                try
                 {
-                    try { Directory.Delete(extractPath, true); } catch { }
-                    extractPath = finalPath;
+                    // Verify package signature before extraction
+                    var sigResult = PackageSignatureVerifier.VerifyPackage(nupkgPath);
+                    switch (sigResult.Status)
+                    {
+                        case SignatureStatus.Valid:
+                            Console.WriteLine($"  Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
+                            break;
+                        case SignatureStatus.Unsigned:
+                            Console.Error.WriteLine("  warning: package is not signed");
+                            break;
+                        case SignatureStatus.Invalid:
+                            Console.Error.WriteLine($"  error: package signature verification failed: {sigResult.Reason}");
+                            return 1;
+                    }
+
+                    string tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-install-{Path.GetRandomFileName()}");
+                    extractPath = PackageExtractor.Extract(nupkgPath, tempDir);
+
+                    // Cache the extracted package
+                    string? finalPath = cache.Cache(packageName, version, extractPath);
+                    if (finalPath is not null)
+                    {
+                        try { Directory.Delete(extractPath, true); } catch { }
+                        extractPath = finalPath;
+                    }
+                }
+                finally
+                {
+                    try { File.Delete(nupkgPath); } catch { }
                 }
             }
             catch (HttpRequestException ex)
