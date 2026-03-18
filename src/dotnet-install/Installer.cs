@@ -156,7 +156,15 @@ static class Installer
                     switch (sigResult.Status)
                     {
                         case SignatureStatus.Valid:
-                            Console.WriteLine($"  Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
+                            if (sigResult.SignatureType == SignatureType.Author && sigResult.CounterSignature is { IsValid: true })
+                            {
+                                Console.WriteLine($"  Verified: {sigResult.CounterSignature.Publisher ?? "signed"} ({sigResult.CounterSignature.SignatureType})");
+                                Console.WriteLine($"  Author: {sigResult.Publisher}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"  Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
+                            }
                             break;
                         case SignatureStatus.Unsigned:
                             Console.Error.WriteLine("  warning: package is not signed");
