@@ -2,9 +2,9 @@
 # Install script for dotnet-install.
 # Usage: curl --proto '=https' --tlsv1.2 -sSf https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
 #
-# Uses an existing dotnet-install (if available) or installs it as a
-# temporary global tool, then builds from the local source tree into
-# ~/.dotnet/bin/. Runs `dotnet-install setup` to configure your shell PATH.
+# Builds dotnet-install from the local source tree via `dotnet run` and
+# installs it into ~/.dotnet/bin/. Runs `dotnet-install setup` to
+# configure your shell PATH.
 
 set -eu
 
@@ -13,23 +13,8 @@ main() {
 
     echo "=== Installing dotnet-install ==="
 
-    _used_global_tool=no
-
-    # Use existing dotnet-install if available; otherwise install the global tool temporarily
-    if ! command -v dotnet-install > /dev/null 2>&1; then
-        echo "Installing dotnet-install global tool..."
-        dotnet tool install -g dotnet-install
-        _used_global_tool=yes
-    fi
-
-    # Install from the local source tree (current branch, as-is)
-    dotnet-install src/dotnet-install
-
-    # Remove the temporary global tool if we installed it
-    if [ "$_used_global_tool" = "yes" ]; then
-        echo "Removing temporary global tool..."
-        dotnet tool uninstall -g dotnet-install
-    fi
+    # Install from the local source tree using dotnet run (no global tool needed)
+    dotnet run --project src/dotnet-install -- src/dotnet-install
 
     # Run setup to configure shell PATH.
     # Connect /dev/tty for interactive prompts when piped.
