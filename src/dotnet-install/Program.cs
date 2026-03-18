@@ -30,6 +30,9 @@ if (args is ["remove", ..])
 if (args is ["setup", ..])
     return SetupCommand.Run(Installer.DefaultInstallDir);
 
+if (args is ["update", ..])
+    return await UpdateCommand.RunAsync(Installer.DefaultInstallDir, args[1..]);
+
 // --- Default: install ---
 
 var options = ParseOptions(args);
@@ -127,7 +130,7 @@ else if (options.ProjectPath is not null)
         return 1;
     }
 
-    result = Installer.Install(projectFile, installDir);
+    result = Installer.Install(projectFile, installDir, CreateLocalSource(projectFile));
 }
 else
 {
@@ -142,6 +145,41 @@ if (result == 0)
 return result;
 
 // ---- Argument parsing ----
+
+static InstallSource CreateLocalSource(string projectFile)
+{
+    string fullPath = Path.GetFullPath(projectFile);
+    string? projectDir = Path.GetDirectoryName(fullPath);
+    string? commit = null;
+
+    if (projectDir is not null)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git")
+            {
+                WorkingDirectory = projectDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            psi.ArgumentList.Add("rev-parse");
+            psi.ArgumentList.Add("HEAD");
+
+            using var p = System.Diagnostics.Process.Start(psi);
+            commit = p?.StandardOutput.ReadToEnd().Trim();
+            p?.WaitForExit();
+            if (p?.ExitCode != 0) commit = null;
+        }
+        catch { }
+    }
+
+    return new InstallSource
+    {
+        Type = "local",
+        Project = fullPath,
+        Commit = commit
+    };
+}
 
 static string? FindProjectFile(string path)
 {
@@ -243,6 +281,7 @@ static void PrintUsage()
       dotnet install --package <name>[@<version>] [options]
       dotnet install setup
       dotnet install list
+      dotnet install update [<tool>...]
       dotnet install remove <tool> [<tool>...]
 
     Arguments:
@@ -266,6 +305,7 @@ static void PrintUsage()
     Commands:
       setup                 Configure shell PATH and create self-link
       list                  List installed tools
+      update [<tool>...]    Check for updates and reinstall (all or named tools)
       remove <tool>...      Remove installed tools
 
     Examples:
@@ -278,6 +318,8 @@ static void PrintUsage()
       dotnet install --package dotnet-counters --allow-roll-forward
       dotnet install setup                             Configure shell and PATH
       dotnet install list                              List installed tools
+      dotnet install update                            Update all tools
+      dotnet install update my-tool                    Update a specific tool
       dotnet install remove my-tool                    Remove a tool
     """);
 }
