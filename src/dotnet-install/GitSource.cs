@@ -9,7 +9,7 @@ static class GitSource
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".nuget", "git-tools");
 
-    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? projectOverride)
+    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? projectOverride, bool requireSourceLink = false)
     {
         // Parse owner/repo[@ref]
         int atIndex = spec.IndexOf('@');
@@ -99,7 +99,7 @@ static class GitSource
             Project = projectOverride
         };
 
-        return Installer.Install(projectFile, installDir, source);
+        return Installer.Install(projectFile, installDir, source, requireSourceLink);
     }
 
     // ---- Project discovery ----

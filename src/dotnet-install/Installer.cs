@@ -11,7 +11,7 @@ static class Installer
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
 
-    public static int Install(string projectFile, string installDir, InstallSource? source = null)
+    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false)
     {
         // 1. Evaluate the project to read properties before building
         var info = EvaluateProject(projectFile);
@@ -44,7 +44,14 @@ static class Installer
                 return 1;
             }
 
-            // 3. Locate executable in publish output
+            // 3. SourceLink verification (before placement)
+            if (requireSourceLink && !SourceLinkCheck.Verify(tempDir))
+            {
+                Console.Error.WriteLine("  error: --require-sourcelink specified but SourceLink verification failed");
+                return 1;
+            }
+
+            // 4. Locate executable in publish output
             string execName = OperatingSystem.IsWindows() ? $"{appName}.exe" : appName;
             string execPath = Path.Combine(tempDir, execName);
 
@@ -54,7 +61,7 @@ static class Installer
                 return 1;
             }
 
-            // 4. Detect single-file vs multi-file and place
+            // 5. Detect single-file vs multi-file and place
             bool singleFile = IsSingleFile(tempDir);
             Directory.CreateDirectory(installDir);
 
@@ -94,7 +101,7 @@ static class Installer
 
     // ---- Package install ----
 
-    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir, bool allowRollForward = false)
+    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir, bool allowRollForward = false, bool requireSourceLink = false)
     {
         // Parse name[@version]
         var parsed = PackageExtractor.ParsePackageReference(packageSpec);
@@ -195,6 +202,13 @@ static class Installer
 
             string commandName = toolInfo.CommandName;
             string toolDir = toolInfo.ToolDirectory;
+
+            // SourceLink verification (before placement)
+            if (requireSourceLink && !SourceLinkCheck.Verify(toolDir))
+            {
+                Console.Error.WriteLine("  error: --require-sourcelink specified but SourceLink verification failed");
+                return 1;
+            }
 
             Directory.CreateDirectory(installDir);
 
