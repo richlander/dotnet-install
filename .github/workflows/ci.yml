@@ -137,11 +137,69 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'preview'
 
-      - name: Pack
-        run: dotnet pack dotnet-install/src/dotnet-install -c Release
+      - name: Pack pointer package
+        run: dotnet pack dotnet-install/src/dotnet-install -c Release -p:OfficialBuild=true
 
-      - name: Upload package
+      - name: Upload pointer package
         uses: actions/upload-artifact@v7
         with:
-          name: package
+          name: package-pointer
           path: dotnet-install/artifacts/package/release/*.nupkg
+          if-no-files-found: error
+
+      - name: Pack any (non-AOT) package
+        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r any -p:PublishAot=false -p:OfficialBuild=true
+
+      - name: Upload any package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-any
+          path: dotnet-install/artifacts/package/release/*.nupkg
+          if-no-files-found: error
+
+      - name: Pack linux-x64 AOT package
+        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r linux-x64 -p:OfficialAotBuild=true
+
+      - name: Upload linux-x64 package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-linux-x64
+          path: dotnet-install/artifacts/package/release/*.nupkg
+          if-no-files-found: error
+
+  pack-rid:
+    needs: build
+    if: always() && needs.build.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: win-arm64
+            os: windows-latest
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+          - rid: osx-arm64
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: dotnet-install
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Pack RID-specific package
+        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }} -p:OfficialAotBuild=true
+
+      - name: Upload RID package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.rid }}
+          path: dotnet-install/artifacts/package/release/*.nupkg
+          if-no-files-found: error

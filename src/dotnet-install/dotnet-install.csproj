@@ -11,6 +11,14 @@
     <PackageId>dotnet-install</PackageId>
     <Version>0.2.0</Version>
     <Description>Install .NET executables to PATH — like cargo install and go install</Description>
+    <!-- RID-specific tool packaging: Native AOT for common platforms, CoreCLR fallback for others -->
+    <ToolPackageRuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(OfficialBuild)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <Deterministic>true</Deterministic>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
