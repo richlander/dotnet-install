@@ -23,7 +23,7 @@ $installDir = if ($env:DOTNET_INSTALL_DIR) {
     Join-Path $HOME ".dotnet" "bin"
 }
 
-$version = "0.1.0"
+$version = "0.1.1"
 $rid = "win-x64"
 $url = "$feed/v$version/dotnet-install-$version-$rid.zip"
 
