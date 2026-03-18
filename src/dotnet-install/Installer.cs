@@ -11,7 +11,7 @@ static class Installer
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
 
-    public static int Install(string projectFile, string installDir)
+    public static int Install(string projectFile, string installDir, InstallSource? source = null)
     {
         // 1. Evaluate the project to read properties before building
         var info = EvaluateProject(projectFile);
@@ -65,6 +65,14 @@ static class Installer
             else
             {
                 PlaceMultiFile(tempDir, installDir, appName, execName);
+            }
+
+            // Write install metadata (for update tracking)
+            if (source is not null)
+            {
+                string metaDir = Path.Combine(installDir, $"_{appName}");
+                Directory.CreateDirectory(metaDir);
+                ToolMetadata.Write(metaDir, new ToolManifest { Source = source });
             }
 
             string display = singleFile ? execName :
@@ -199,6 +207,19 @@ static class Installer
             {
                 // Native single-file: place directly
                 PlaceSingleFile(nativeExecPath, installDir, nativeExecName);
+
+                // Write install metadata for update tracking
+                string metaDir = Path.Combine(installDir, $"_{commandName}");
+                Directory.CreateDirectory(metaDir);
+                ToolMetadata.Write(metaDir, new ToolManifest
+                {
+                    Source = new InstallSource
+                    {
+                        Type = "nuget",
+                        Package = packageName,
+                        Version = version
+                    }
+                });
             }
             else
             {
@@ -252,7 +273,13 @@ static class Installer
                     ToolMetadata.Write(appDir, new ToolManifest
                     {
                         EntryPoint = entryDll,
-                        RollForward = allowRollForward
+                        RollForward = allowRollForward,
+                        Source = new InstallSource
+                        {
+                            Type = "nuget",
+                            Package = packageName,
+                            Version = version
+                        }
                     });
 
                     CreateManagedLauncher(installDir, appDir, commandName, entryDll, allowRollForward);

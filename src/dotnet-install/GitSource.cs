@@ -81,14 +81,25 @@ static class GitSource
             }
         }
 
+        // Capture commit SHA for provenance tracking
+        string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
+
         // Discover project
         string? projectFile = DiscoverProject(repoDir, projectOverride);
         if (projectFile is null)
             return 1;
 
-        // Delegate to the existing Installer.Install which handles
-        // project evaluation, publish, single/multi-file placement
-        return Installer.Install(projectFile, installDir);
+        var source = new InstallSource
+        {
+            Type = "github",
+            Repository = $"{owner}/{repo}",
+            Ref = gitRef,
+            Commit = commitSha,
+            Ssh = useSsh,
+            Project = projectOverride
+        };
+
+        return Installer.Install(projectFile, installDir, source);
     }
 
     // ---- Project discovery ----

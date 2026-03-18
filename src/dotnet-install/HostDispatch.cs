@@ -38,7 +38,14 @@ static unsafe class HostDispatch
             return 1;
         }
 
-        string entryDll = Path.Combine(appDir, manifest.EntryPoint);
+        string? entryPoint = manifest.EntryPoint;
+        if (string.IsNullOrEmpty(entryPoint))
+        {
+            Console.Error.WriteLine($"error: tool '{toolName}' has no entry point in .tool.json");
+            return 1;
+        }
+
+        string entryDll = Path.Combine(appDir, entryPoint);
         if (!File.Exists(entryDll))
         {
             Console.Error.WriteLine($"error: tool entry point not found: {manifest.EntryPoint}");
