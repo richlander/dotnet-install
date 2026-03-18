@@ -57,12 +57,12 @@ int result;
 if (options.PackageSpec is not null)
 {
     // Explicit: --package
-    result = await Installer.InstallPackageAsync(options.PackageSpec, installDir, options.AllowRollForward);
+    result = await Installer.InstallPackageAsync(options.PackageSpec, installDir, options.AllowRollForward, options.RequireSourceLink);
 }
 else if (options.GitSpec is not null)
 {
     // Explicit: --github, or confirmed via prompt
-    result = GitSource.InstallFromGit(options.GitSpec, installDir, options.UseSsh, options.ProjectPath);
+    result = GitSource.InstallFromGit(options.GitSpec, installDir, options.UseSsh, options.ProjectPath, options.RequireSourceLink);
 }
 else if (options.UnresolvedArg is not null)
 {
@@ -93,7 +93,7 @@ else if (options.UnresolvedArg is not null)
             return 1;
         }
 
-        result = GitSource.InstallFromGit(arg, installDir, options.UseSsh, options.ProjectPath);
+        result = GitSource.InstallFromGit(arg, installDir, options.UseSsh, options.ProjectPath, options.RequireSourceLink);
     }
     else
     {
@@ -116,7 +116,7 @@ else if (options.UnresolvedArg is not null)
             return 1;
         }
 
-        result = await Installer.InstallPackageAsync(arg, installDir, options.AllowRollForward);
+        result = await Installer.InstallPackageAsync(arg, installDir, options.AllowRollForward, options.RequireSourceLink);
     }
 }
 else if (options.ProjectPath is not null)
@@ -130,7 +130,7 @@ else if (options.ProjectPath is not null)
         return 1;
     }
 
-    result = Installer.Install(projectFile, installDir, CreateLocalSource(projectFile));
+    result = Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), options.RequireSourceLink);
 }
 else
 {
@@ -222,6 +222,7 @@ static Options ParseOptions(string[] args)
     bool showHelp = false;
     bool showVersion = false;
     bool allowRollForward = false;
+    bool requireSourceLink = false;
 
     for (int i = 0; i < args.Length; i++)
     {
@@ -248,6 +249,9 @@ static Options ParseOptions(string[] args)
             case "--allow-roll-forward":
                 allowRollForward = true;
                 break;
+            case "--require-sourcelink":
+                requireSourceLink = true;
+                break;
             case "-h" or "--help":
                 showHelp = true;
                 break;
@@ -267,7 +271,7 @@ static Options ParseOptions(string[] args)
         }
     }
 
-    return new(projectPath, packageSpec, gitSpec, unresolvedArg, outputDir, useLocalBin, useSsh, showHelp, showVersion, allowRollForward);
+    return new(projectPath, packageSpec, gitSpec, unresolvedArg, outputDir, useLocalBin, useSsh, showHelp, showVersion, allowRollForward, requireSourceLink);
 }
 
 static void PrintUsage()
@@ -296,6 +300,7 @@ static void PrintUsage()
     Install options:
       --local-bin         Install to ~/.local/bin/ instead of ~/.dotnet/bin/
       --allow-roll-forward Allow tool to run on a newer .NET runtime version
+      --require-sourcelink Require SourceLink metadata in installed assemblies
       -o, --output        Installation directory (overrides default and --local-bin)
 
     Other:
@@ -334,4 +339,5 @@ record Options(
     bool UseSsh,
     bool ShowHelp,
     bool ShowVersion,
-    bool AllowRollForward);
+    bool AllowRollForward,
+    bool RequireSourceLink);

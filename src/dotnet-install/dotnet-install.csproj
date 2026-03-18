@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="NuGetFetch" Version="0.5.0" />
+    <PackageReference Include="SourceLinkFetch" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>
