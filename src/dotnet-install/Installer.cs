@@ -151,29 +151,6 @@ static class Installer
 
                 try
                 {
-                    // Verify package signature before extraction
-                    var sigResult = PackageSignatureVerifier.VerifyPackage(nupkgPath);
-                    switch (sigResult.Status)
-                    {
-                        case SignatureStatus.Valid:
-                            if (sigResult.SignatureType == SignatureType.Author && sigResult.CounterSignature is { IsValid: true })
-                            {
-                                Console.WriteLine($"  Verified: {sigResult.CounterSignature.Publisher ?? "signed"} ({sigResult.CounterSignature.SignatureType})");
-                                Console.WriteLine($"  Author: {sigResult.Publisher}");
-                            }
-                            else
-                            {
-                                Console.WriteLine($"  Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
-                            }
-                            break;
-                        case SignatureStatus.Unsigned:
-                            Console.Error.WriteLine("  warning: package is not signed");
-                            break;
-                        case SignatureStatus.Invalid:
-                            Console.Error.WriteLine($"  error: package signature verification failed: {sigResult.Reason}");
-                            return 1;
-                    }
-
                     string tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-install-{Path.GetRandomFileName()}");
                     extractPath = PackageExtractor.Extract(nupkgPath, tempDir);
 
@@ -194,6 +171,25 @@ static class Installer
             {
                 Console.Error.WriteLine($"  error: failed to download {packageName}@{version}: {ex.Message}");
                 return 1;
+            }
+        }
+
+        // Verify signature from extracted .signature.p7s (works for both fresh and cached)
+        string sigPath = Path.Combine(extractPath, ".signature.p7s");
+        if (File.Exists(sigPath))
+        {
+            var sigResult = PackageSignatureVerifier.VerifySignatureFile(sigPath);
+            switch (sigResult.Status)
+            {
+                case SignatureStatus.Valid:
+                    PrintSignature(sigResult);
+                    break;
+                case SignatureStatus.Unsigned:
+                    Console.Error.WriteLine("  warning: package is not signed");
+                    break;
+                case SignatureStatus.Invalid:
+                    Console.Error.WriteLine($"  error: package signature verification failed: {sigResult.Reason}");
+                    return 1;
             }
         }
 
@@ -650,6 +646,21 @@ static class Installer
     {
         try { return new FileInfo(path).LinkTarget is not null; }
         catch { return false; }
+    }
+
+    // ---- Signature display ----
+
+    static void PrintSignature(SignatureVerificationResult sigResult)
+    {
+        if (sigResult.SignatureType == SignatureType.Author && sigResult.CounterSignature is { IsValid: true })
+        {
+            Console.WriteLine($"  Verified: {sigResult.CounterSignature.Publisher ?? "signed"} ({sigResult.CounterSignature.SignatureType})");
+            Console.WriteLine($"  Author: {sigResult.Publisher}");
+        }
+        else
+        {
+            Console.WriteLine($"  Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
+        }
     }
 
     static void CopyDirectory(string source, string destination)
