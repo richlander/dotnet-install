@@ -7,11 +7,12 @@ on:
         description: 'CI workflow run ID to publish from'
         required: true
       confirm:
-        description: 'Type "publish" to confirm NuGet release'
+        description: 'Type "publish" to confirm release'
         required: true
 
 permissions:
   contents: write
+  packages: write
   id-token: write
 
 jobs:
@@ -22,6 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Download binaries from CI run
+        uses: actions/download-artifact@v8
+        with:
+          path: binaries
+          pattern: binary-*
+          merge-multiple: true
+          run-id: ${{ github.event.inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download package from CI run
         uses: actions/download-artifact@v8
         with:
@@ -30,8 +40,12 @@ jobs:
           run-id: ${{ github.event.inputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: List packages
-        run: ls -la packages/
+      - name: List artifacts
+        run: |
+          echo "=== Binaries ==="
+          ls -la binaries/
+          echo "=== Packages ==="
+          ls -la packages/
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -40,18 +54,28 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: NuGet login (OIDC → temp API key)
-        id: login
+        id: nuget-login
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      - name: Publish to NuGet
+      - name: Publish to NuGet.org
         run: |
           for pkg in packages/*.nupkg; do
-            echo "Publishing: $(basename "$pkg")"
+            echo "Publishing to NuGet.org: $(basename "$pkg")"
             dotnet nuget push "$pkg" \
-              --api-key ${{ steps.login.outputs.NUGET_API_KEY }} \
+              --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} \
               --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+      - name: Publish to GitHub Packages
+        run: |
+          for pkg in packages/*.nupkg; do
+            echo "Publishing to GitHub Packages: $(basename "$pkg")"
+            dotnet nuget push "$pkg" \
+              --api-key ${{ secrets.GITHUB_TOKEN }} \
+              --source https://nuget.pkg.github.com/richlander/index.json \
               --skip-duplicate
           done
 
@@ -64,6 +88,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           gh release create "v${{ steps.version.outputs.version }}" \
+            binaries/* \
             packages/*.nupkg \
             --title "dotnet-install ${{ steps.version.outputs.version }}" \
             --generate-notes

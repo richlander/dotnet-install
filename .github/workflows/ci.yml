@@ -100,6 +100,28 @@ jobs:
           dotnet run --project dotnet-install/src/dotnet-install -c Release -- --version
           dotnet run --project dotnet-install/src/dotnet-install -c Release -- --help
 
+      - name: Publish NativeAOT
+        run: dotnet publish dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }}
+
+      - name: Package binary (tar.gz)
+        if: runner.os != 'Windows'
+        run: |
+          cd dotnet-install/artifacts/publish/dotnet-install/release_${{ matrix.rid }}
+          tar -czf "$GITHUB_WORKSPACE/dotnet-install-${{ matrix.rid }}.tar.gz" dotnet-install
+
+      - name: Package binary (zip)
+        if: runner.os == 'Windows'
+        run: |
+          cd dotnet-install/artifacts/publish/dotnet-install/release_${{ matrix.rid }}
+          Compress-Archive -Path dotnet-install.exe -DestinationPath "$env:GITHUB_WORKSPACE/dotnet-install-${{ matrix.rid }}.zip"
+        shell: pwsh
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.rid }}
+          path: dotnet-install-${{ matrix.rid }}.*
+
   pack:
     needs: build
     if: always() && needs.build.result == 'success'
