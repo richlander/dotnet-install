@@ -1,11 +1,10 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 
 /// <summary>
-/// Low-level P/Invoke layer for hostfxr native APIs.
-/// Uses LibraryImport with manual string marshalling to handle the
-/// Windows (UTF-16) vs Unix (UTF-8) char_t divergence.
+/// Low-level interop layer for hostfxr native APIs.
+/// Uses manual function pointer resolution to handle NativeAOT correctly,
+/// plus LibraryImport for system libraries (libc).
 /// </summary>
 static unsafe partial class HostFxr
 {
@@ -13,21 +12,55 @@ static unsafe partial class HostFxr
 
     static string? s_dotnetRoot;
     static bool s_initialized;
+    static nint s_hostfxrHandle;
 
     static HostFxr()
     {
-        NativeLibrary.SetDllImportResolver(typeof(HostFxr).Assembly, ResolveLibrary);
+        // Load hostfxr manually — SetDllImportResolver doesn't work in NativeAOT
+        EnsureInitialized();
+        string? path = FindHostFxrPath();
+        if (path is not null)
+            NativeLibrary.TryLoad(path, out s_hostfxrHandle);
     }
 
-    // ---- Library resolution ----
-
-    static nint ResolveLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    /// <summary>
+    /// Wraps hostfxr_get_dotnet_environment_info via manual function pointer.
+    /// </summary>
+    internal static int GetDotnetEnvironmentInfo(
+        nint dotnet_root, nint reserved,
+        delegate* unmanaged[Cdecl]<nint, nint, void> result,
+        nint result_context)
     {
-        if (libraryName != LibName) return 0;
-        string? path = FindHostFxrPath();
-        if (path is not null && NativeLibrary.TryLoad(path, out nint handle))
-            return handle;
-        return 0;
+        if (s_hostfxrHandle == 0)
+            throw new DllNotFoundException("hostfxr not loaded");
+
+        if (!NativeLibrary.TryGetExport(s_hostfxrHandle,
+            "hostfxr_get_dotnet_environment_info", out nint fn))
+            throw new EntryPointNotFoundException("hostfxr_get_dotnet_environment_info");
+
+        return ((delegate* unmanaged[Cdecl]<nint, nint,
+            delegate* unmanaged[Cdecl]<nint, nint, void>, nint, int>)fn)(
+                dotnet_root, reserved, result, result_context);
+    }
+
+    /// <summary>
+    /// Wraps hostfxr_resolve_frameworks_for_runtime_config via manual function pointer.
+    /// </summary>
+    internal static int ResolveFrameworksForRuntimeConfig(
+        nint runtime_config_path, nint parameters,
+        delegate* unmanaged[Cdecl]<nint, nint, void> callback,
+        nint result_context)
+    {
+        if (s_hostfxrHandle == 0)
+            throw new DllNotFoundException("hostfxr not loaded");
+
+        if (!NativeLibrary.TryGetExport(s_hostfxrHandle,
+            "hostfxr_resolve_frameworks_for_runtime_config", out nint fn))
+            throw new EntryPointNotFoundException("hostfxr_resolve_frameworks_for_runtime_config");
+
+        return ((delegate* unmanaged[Cdecl]<nint, nint,
+            delegate* unmanaged[Cdecl]<nint, nint, void>, nint, int>)fn)(
+                runtime_config_path, parameters, callback, result_context);
     }
 
     internal static string? DotnetRoot
@@ -92,11 +125,9 @@ static unsafe partial class HostFxr
         if (!Directory.Exists(fxrDir)) return null;
 
         // Find the highest versioned hostfxr
+        // Use directory enumeration — Version.TryParse doesn't handle preview suffixes
         string? best = Directory.GetDirectories(fxrDir)
-            .Select(d => (dir: d, ver: Version.TryParse(Path.GetFileName(d), out var v) ? v : null))
-            .Where(x => x.ver is not null)
-            .OrderByDescending(x => x.ver)
-            .Select(x => x.dir)
+            .OrderByDescending(d => Path.GetFileName(d))
             .FirstOrDefault();
 
         if (best is null) return null;
@@ -135,23 +166,6 @@ static unsafe partial class HostFxr
             ? Marshal.PtrToStringUni(ptr)
             : Marshal.PtrToStringUTF8(ptr);
     }
-
-    // ---- P/Invoke declarations ----
-    // Using nint for char_t* parameters to avoid compile-time string encoding commitment.
-
-    [LibraryImport(LibName, EntryPoint = "hostfxr_get_dotnet_environment_info")]
-    internal static partial int GetDotnetEnvironmentInfo(
-        nint dotnet_root,
-        nint reserved,
-        delegate* unmanaged[Cdecl]<nint, nint, void> result,
-        nint result_context);
-
-    [LibraryImport(LibName, EntryPoint = "hostfxr_resolve_frameworks_for_runtime_config")]
-    internal static partial int ResolveFrameworksForRuntimeConfig(
-        nint runtime_config_path,
-        nint parameters,
-        delegate* unmanaged[Cdecl]<nint, nint, void> callback,
-        nint result_context);
 
     // ---- Struct definitions ----
     // String fields are nint (char_t*) — use PtrToString() to read.

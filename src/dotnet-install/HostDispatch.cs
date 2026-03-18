@@ -11,15 +11,17 @@ static unsafe class HostDispatch
 {
     public static int Run(string toolName, string[] args)
     {
-        // Resolve the install directory from our own location
-        string? selfPath = Environment.ProcessPath;
-        if (selfPath is null)
+        // Resolve the install directory from the invoked symlink path, not ProcessPath
+        // (ProcessPath resolves symlinks, losing the install directory context)
+        string invokedPath = Environment.GetCommandLineArgs()[0];
+        string? installDir = Path.GetDirectoryName(Path.GetFullPath(invokedPath));
+
+        if (installDir is null)
         {
             Console.Error.WriteLine($"error: unable to determine install directory");
             return 1;
         }
 
-        string installDir = Path.GetDirectoryName(selfPath)!;
         string appDir = Path.Combine(installDir, $"_{toolName}");
 
         if (!Directory.Exists(appDir))
