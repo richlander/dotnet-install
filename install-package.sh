@@ -1,20 +1,20 @@
 #!/bin/sh
-# Install script for dotnet-install.
-# Usage: curl --proto '=https' --tlsv1.2 -sSf https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
+# Install dotnet-install from its published NuGet package.
+# Usage: ./install-package.sh
 #
-# Builds dotnet-install from the local source tree via `dotnet run` and
-# installs it into ~/.dotnet/bin/. Runs `dotnet-install setup` to
-# configure your shell PATH.
+# Builds the tool from source via `dotnet run` to bootstrap, then uses
+# it to install the released NuGet package. Runs `dotnet-install setup`
+# to configure your shell PATH.
 
 set -eu
 
 main() {
     need_cmd dotnet
 
-    echo "=== Installing dotnet-install ==="
+    echo "=== Installing dotnet-install from NuGet ==="
 
-    # Install from the local source tree using dotnet run (no global tool needed)
-    dotnet run --project src/dotnet-install -- src/dotnet-install
+    # Use dotnet run to install the published NuGet package
+    dotnet run --project src/dotnet-install -- --package dotnet-install
 
     # Run setup to configure shell PATH.
     # Connect /dev/tty for interactive prompts when piped.
