@@ -203,6 +203,16 @@ static class Installer
             string commandName = toolInfo.CommandName;
             string toolDir = toolInfo.ToolDirectory;
 
+            // Guard: installing a tool whose command name matches the host binary
+            // would overwrite it with a self-referencing symlink (BusyBox model).
+            string currentExeName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "");
+            if (string.Equals(commandName, currentExeName, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine($"  error: cannot install '{commandName}' from NuGet — it would overwrite the running host binary.");
+                Console.Error.WriteLine("  To update dotnet-install, run: dotnet-install update");
+                return 1;
+            }
+
             // SourceLink verification (before placement)
             if (requireSourceLink && !SourceLinkCheck.Verify(toolDir))
             {
