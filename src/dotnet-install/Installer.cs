@@ -552,7 +552,15 @@ static class Installer
         var runtimes = RuntimeCompat.GetInstalledRuntimes();
         var highestRuntime = runtimes
             .Where(r => r.Name == "Microsoft.NETCore.App")
-            .Select(r => Version.TryParse(r.Version, out var v) ? v : null)
+            .Select(r =>
+            {
+                // Strip pre-release suffix (e.g. "11.0.0-preview.2.26159.112" → "11.0.0")
+                // Version.TryParse doesn't handle SemVer pre-release tags
+                string ver = r.Version;
+                int dash = ver.IndexOf('-');
+                if (dash > 0) ver = ver[..dash];
+                return Version.TryParse(ver, out var v) ? v : null;
+            })
             .Where(v => v is not null)
             .Max();
 
