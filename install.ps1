@@ -23,9 +23,9 @@ $installDir = if ($env:DOTNET_INSTALL_DIR) {
     Join-Path $HOME ".dotnet" "bin"
 }
 
-$version = "0.1.1"
+$version = "0.2.2"
 $rid = "win-x64"
-$url = "$feed/v$version/dotnet-install-$version-$rid.zip"
+$url = "$feed/v$version/dotnet-install-$rid.zip"
 
 function New-TempFolder {
     $t = Join-Path ([System.IO.Path]::GetTempPath()) `

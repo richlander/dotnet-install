@@ -32,8 +32,27 @@ Windows (PowerShell):
 irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1 | iex
 ```
 
-The script downloads a platform-specific binary and runs
-`dotnet-install setup` to configure your shell.
+These scripts download a platform-specific binary and run
+`dotnet-install setup` to configure your shell. No .NET SDK required.
+
+### From source
+
+For contributors or local development:
+
+```bash
+./install-source.sh
+```
+
+Builds from the local source tree via `dotnet run` (requires the .NET SDK).
+
+### From NuGet package
+
+```bash
+./install-package.sh
+```
+
+Bootstraps via `dotnet run`, then installs the published NuGet package
+(requires the .NET SDK).
 
 ### Manual setup
 
