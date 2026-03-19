@@ -195,6 +195,14 @@ static class Installer
 
         try
         {
+            // Check if this is a pointer package with RID-specific satellite packages
+            string? ridPackageId = FindRidSpecificPackage(extractPath);
+            if (ridPackageId is not null)
+            {
+                // Redirect to the RID-specific package
+                return await InstallPackageAsync($"{ridPackageId}@{version}", installDir, allowRollForward, requireSourceLink);
+            }
+
             // Find the tool's entry point via DotnetToolSettings.xml
             var toolInfo = FindToolSettings(extractPath);
 
@@ -315,6 +323,40 @@ static class Installer
     }
 
     record ToolSettings(string CommandName, string EntryPoint, string Runner, string ToolDirectory);
+
+    /// <summary>
+    /// Resolves the RID-specific package ID from a pointer package's DotnetToolSettings.xml.
+    /// Returns null if the package is not a pointer package (i.e., contains tools directly).
+    /// </summary>
+    static string? FindRidSpecificPackage(string extractPath)
+    {
+        string rid = RuntimeInformation.RuntimeIdentifier;
+        var ridFallbacks = GetRidFallbacks(rid);
+
+        var settingsFiles = Directory.GetFiles(extractPath, "DotnetToolSettings.xml", SearchOption.AllDirectories);
+        foreach (string f in settingsFiles)
+        {
+            var doc = System.Xml.Linq.XDocument.Load(f);
+            var ridPackages = doc.Descendants("RuntimeIdentifierPackage").ToList();
+            if (ridPackages.Count == 0)
+                continue;
+
+            // Find the best matching RID-specific package
+            foreach (string candidateRid in ridFallbacks)
+            {
+                var match = ridPackages.FirstOrDefault(rp =>
+                    string.Equals(rp.Attribute("RuntimeIdentifier")?.Value, candidateRid, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    string? packageId = match.Attribute("Id")?.Value;
+                    if (!string.IsNullOrEmpty(packageId))
+                        return packageId;
+                }
+            }
+        }
+
+        return null;
+    }
 
     static ToolSettings? FindToolSettings(string extractPath)
     {
@@ -570,9 +612,10 @@ static class Installer
 
     static bool IsSingleFile(string publishDir)
     {
-        // Single-file = only one significant file (ignoring .pdb debug symbols)
+        // Single-file = only one significant file (ignoring debug symbols and tool metadata)
         var files = Directory.GetFiles(publishDir)
-            .Where(f => !f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
+            .Where(f => !f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
+                      && !Path.GetFileName(f).Equals("DotnetToolSettings.xml", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         return files.Count == 1;
