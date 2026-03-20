@@ -29,6 +29,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\shell-complete\src\ShellComplete\ShellComplete.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="dotnet-install.Tests" />
   </ItemGroup>
 
