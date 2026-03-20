@@ -11,10 +11,11 @@ static unsafe class HostDispatch
 {
     public static int Run(string toolName, string[] args)
     {
-        // Resolve the install directory from the invoked symlink path, not ProcessPath
-        // (ProcessPath resolves symlinks, losing the install directory context)
-        string invokedPath = Environment.GetCommandLineArgs()[0];
-        string? installDir = Path.GetDirectoryName(Path.GetFullPath(invokedPath));
+        // The symlink (e.g. dotnetsay) and dotnet-install live in the same directory.
+        // ProcessPath resolves the symlink to the actual binary, giving us the install dir.
+        // We can't use GetCommandLineArgs()[0] because argv[0] may be a bare name
+        // (e.g. "dotnetsay") which would resolve relative to CWD, not the install dir.
+        string? installDir = Path.GetDirectoryName(Environment.ProcessPath);
 
         if (installDir is null)
         {
