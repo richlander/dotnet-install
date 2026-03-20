@@ -541,7 +541,7 @@ static class Installer
             OutputType: GetProperty(props, "OutputType") ?? "Library",
             IsNativeAot: isNativeAot,
             IsSingleFile: IsPropertyTrue(props, "PublishSingleFile"),
-            IsSelfContained: isNativeAot || IsPropertyTrue(props, "SelfContained"),
+            IsSelfContained: IsPropertyTrue(props, "SelfContained"),
             TargetFramework: GetProperty(props, "TargetFramework")
         );
     }
