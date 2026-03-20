@@ -4,7 +4,7 @@ static class RemoveCommand
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: dotnet install remove <tool> [<tool>...]");
+            Console.Error.WriteLine("Usage: dotnet-install remove <tool> [<tool>...]");
             return 1;
         }
 
@@ -14,6 +14,13 @@ static class RemoveCommand
         {
             if (name.StartsWith('-'))
                 continue;
+
+            // Prevent self-removal
+            if (name.Equals("dotnet-install", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine("Skipping: dotnet-install (cannot remove self)");
+                continue;
+            }
 
             // Find the tool entry (symlink, binary, or .cmd shim)
             string? entryPath = FindEntry(installDir, name);
