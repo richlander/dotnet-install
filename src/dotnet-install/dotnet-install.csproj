@@ -22,14 +22,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Markout" Version="0.10.2" />
+    <PackageReference Include="Markout" Version="0.11.0" />
     <PackageReference Include="NuGetFetch" Version="0.6.1" />
+    <PackageReference Include="ShellComplete" Version="0.1.0" />
     <PackageReference Include="SourceLinkFetch" Version="0.1.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.2" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\shell-complete\src\ShellComplete\ShellComplete.csproj" />
   </ItemGroup>
 
   <ItemGroup>

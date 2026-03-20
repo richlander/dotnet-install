@@ -35,8 +35,8 @@ static class SearchCommand
             Results = results.Select(r => new SearchRow(
                 r.Id,
                 r.Version,
-                FormatDownloads(r.TotalDownloads),
-                Truncate(r.Description, 60)
+                FormatHelper.FormatDownloads(r.TotalDownloads),
+                FormatHelper.Truncate(r.Description, 60)
             )).ToList()
         };
 
@@ -51,17 +51,4 @@ static class SearchCommand
 
         return 0;
     }
-
-    static string FormatDownloads(long downloads) => downloads switch
-    {
-        >= 1_000_000_000 => $"{downloads / 1_000_000_000.0:0.#}B",
-        >= 1_000_000 => $"{downloads / 1_000_000.0:0.#}M",
-        >= 1_000 => $"{downloads / 1_000.0:0.#}K",
-        _ => downloads.ToString()
-    };
-
-    static string? Truncate(string? s, int max) =>
-        s is null ? null :
-        s.Length <= max ? s :
-        s[..(max - 3)] + "...";
 }

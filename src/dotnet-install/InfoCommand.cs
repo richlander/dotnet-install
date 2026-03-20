@@ -69,7 +69,7 @@ static class InfoCommand
         Console.WriteLine($"{toolName}");
         Console.WriteLine();
         Console.WriteLine($"Type:      {type}");
-        Console.WriteLine($"Size:      {FormatSize(totalSize)}");
+        Console.WriteLine($"Size:      {FormatHelper.FormatSize(totalSize)}");
         Console.WriteLine($"Location:  {entryPath}");
 
         if (info.LinkTarget is not null)
@@ -107,14 +107,6 @@ static class InfoCommand
 
         return 0;
     }
-
-    static string FormatSize(long bytes) => bytes switch
-    {
-        >= 1_073_741_824 => $"{bytes / 1_073_741_824.0:0.#} GB",
-        >= 1_048_576 => $"{bytes / 1_048_576.0:0.#} MB",
-        >= 1_024 => $"{bytes / 1_024.0:0.#} KB",
-        _ => $"{bytes} B"
-    };
 
     static string? FindEntry(string installDir, string name)
     {
