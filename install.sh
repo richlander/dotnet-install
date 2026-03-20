@@ -30,7 +30,7 @@ main() {
     local _rid="$RETVAL"
     assert_nz "$_rid" "rid"
 
-    local _version="0.2.2"
+    local _version="0.2.2" # replaced during publishing
     local _url="${FEED}/v${_version}/dotnet-install-${_rid}.tar.gz"
 
     local _dir
