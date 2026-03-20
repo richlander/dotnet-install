@@ -36,21 +36,27 @@ static class ListCommand
 
     static string GetToolType(FileInfo f, string installDir)
     {
+        string toolName = Path.GetFileNameWithoutExtension(f.Name);
+
         // Symlink to dotnet-install = CoreCLR (busybox host dispatch)
         if (f.LinkTarget is not null)
         {
             string target = Path.GetFileName(f.LinkTarget);
             if (target.StartsWith("dotnet-install"))
                 return "CoreCLR";
-
-            // Symlink into _appname/ directory = NAOT multi-file
-            return "NAOT";
         }
 
-        // Direct executable with _appname/ directory = NAOT multi-file
-        string appDir = Path.Combine(installDir, $"_{f.Name}");
+        // Check the app directory for a managed entry point
+        string appDir = Path.Combine(installDir, $"_{toolName}");
         if (Directory.Exists(appDir))
+        {
+            // Has a .dll = managed (self-contained CoreCLR or framework-dependent)
+            if (File.Exists(Path.Combine(appDir, $"{toolName}.dll")))
+                return "CoreCLR";
+
+            // Native multi-file (no .dll entry point)
             return "NAOT";
+        }
 
         // Direct executable, no app dir = NAOT single-file
         return "NAOT";
