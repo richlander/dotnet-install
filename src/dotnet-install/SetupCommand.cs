@@ -1,10 +1,12 @@
+using System.Diagnostics;
+
 static class SetupCommand
 {
     /// <summary>
-    /// Set up dotnet-install: create self-link in install dir and configure shell PATH.
+    /// Set up dotnet-install: ensure local binary, configure shell PATH, shed bootstrap scaffolding.
     /// Designed to be idempotent — safe to run multiple times.
     /// </summary>
-    public static int Run(string installDir)
+    public static async Task<int> Run(string installDir)
     {
         installDir = Path.GetFullPath(installDir);
         Directory.CreateDirectory(installDir);
@@ -15,11 +17,14 @@ static class SetupCommand
 
         bool didSomething = false;
 
-        // Step 1: Self-link — ensure dotnet-install is accessible from the install directory
-        didSomething |= EnsureSelfLink(installDir);
+        // Step 1: Ensure dotnet-install is installed in the install directory with full pedigree
+        didSomething |= await EnsureLocalInstallAsync(installDir);
 
         // Step 2: Shell PATH configuration
         didSomething |= ConfigureShellPath(installDir);
+
+        // Step 3: Shed bootstrap scaffolding (dotnet tool) if no longer needed
+        didSomething |= ShedDotnetTool(installDir);
 
         if (!didSomething)
         {
@@ -31,58 +36,88 @@ static class SetupCommand
     }
 
     /// <summary>
-    /// Create a symlink (or copy) from the install directory to the running binary,
-    /// so dotnet-install is accessible from ~/.dotnet/bin/ for host dispatch.
+    /// Ensure dotnet-install is installed locally with full pedigree (NuGet metadata,
+    /// .tool.json, version tracking). If running from an external location (e.g. dotnet
+    /// tool .store), self-install from NuGet so the binary is standalone and updatable.
     /// </summary>
-    static bool EnsureSelfLink(string installDir)
+    public static async Task<bool> EnsureLocalInstallAsync(string installDir)
     {
-        string? processPath = Environment.ProcessPath;
-        if (processPath is null)
-        {
-            Console.Error.WriteLine("warning: could not determine process path — skipping self-link.");
-            return false;
-        }
-
-        processPath = Path.GetFullPath(processPath);
         string selfName = "dotnet-install";
         string targetPath = Path.Combine(installDir, selfName);
 
-        // Already in the install directory — nothing to do
-        string processDir = Path.GetDirectoryName(processPath)!;
-        if (string.Equals(Path.GetFullPath(processDir), installDir, StringComparison.Ordinal))
+        // Already have a local binary — nothing to do
+        if (File.Exists(targetPath))
         {
+            string? processPath = Environment.ProcessPath;
+            if (processPath is not null)
+            {
+                string processDir = Path.GetDirectoryName(Path.GetFullPath(processPath))!;
+                if (string.Equals(processDir, installDir, StringComparison.Ordinal))
+                {
+                    Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
+                    return false;
+                }
+            }
+
             Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
             return false;
         }
 
-        // Check if a link/binary already exists and points to the right place
-        if (File.Exists(targetPath))
-        {
-            var info = new FileInfo(targetPath);
-            if (info.LinkTarget is not null &&
-                string.Equals(Path.GetFullPath(info.LinkTarget), processPath, StringComparison.Ordinal))
-            {
-                Console.WriteLine($"✔ {DisplayPath(targetPath)} → {DisplayPath(processPath)}");
-                return false;
-            }
+        // No local binary — self-install from NuGet with full pedigree
+        Console.WriteLine($"Installing dotnet-install to {DisplayPath(installDir)}...");
+        int result = await Installer.InstallPackageAsync(selfName, installDir);
+        return result == 0;
+    }
 
-            // Exists but wrong target — replace
-            File.Delete(targetPath);
+    /// <summary>
+    /// If dotnet-install was bootstrapped via `dotnet tool install -g` and a local
+    /// binary now exists, remove the dotnet tool version — it's no longer needed.
+    /// </summary>
+    static bool ShedDotnetTool(string installDir)
+    {
+        // Check if dotnet-install is registered as a dotnet tool
+        var checkPsi = new ProcessStartInfo("dotnet", ["tool", "list", "-g"])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        using var checkProcess = Process.Start(checkPsi);
+        if (checkProcess is null)
+            return false;
+
+        string output = checkProcess.StandardOutput.ReadToEnd();
+        checkProcess.WaitForExit();
+
+        if (checkProcess.ExitCode != 0 || !output.Contains("dotnet-install", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Only shed if we have a working local binary
+        string localBinary = Path.Combine(installDir, "dotnet-install");
+        if (!File.Exists(localBinary))
+            return false;
+
+        Console.WriteLine();
+        Console.WriteLine("Removing bootstrap dotnet tool...");
+        var psi = new ProcessStartInfo("dotnet", ["tool", "uninstall", "-g", "dotnet-install"])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            return false;
+
+        process.WaitForExit();
+
+        if (process.ExitCode == 0)
+        {
+            Console.WriteLine("✔ Removed dotnet tool (no longer needed)");
+            return true;
         }
 
-        if (OperatingSystem.IsWindows())
-        {
-            // Windows: copy the binary (symlinks require elevated privileges)
-            File.Copy(processPath, targetPath, overwrite: true);
-            Console.WriteLine($"✔ Copied dotnet-install to {DisplayPath(installDir)}");
-        }
-        else
-        {
-            File.CreateSymbolicLink(targetPath, processPath);
-            Console.WriteLine($"✔ {DisplayPath(targetPath)} → {DisplayPath(processPath)}");
-        }
-
-        return true;
+        return false;
     }
 
     /// <summary>
