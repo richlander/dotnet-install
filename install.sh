@@ -30,7 +30,10 @@ main() {
     local _rid="$RETVAL"
     assert_nz "$_rid" "rid"
 
-    local _version="0.2.2" # replaced during publishing
+    local _version
+    _version="$(get_latest_version)" || return 1
+    assert_nz "$_version" "version"
+
     local _url="${FEED}/v${_version}/dotnet-install-${_rid}.tar.gz"
 
     local _dir
@@ -78,6 +81,28 @@ main() {
     else
         "$INSTALL_DIR/dotnet-install" setup
     fi
+}
+
+get_latest_version() {
+    local _url="https://github.com/richlander/dotnet-install/releases/latest"
+    local _redirect
+
+    if command -v curl > /dev/null 2>&1; then
+        _redirect="$(curl --proto '=https' --tlsv1.2 -sI -o /dev/null -w '%{url_effective}' -L "$_url")"
+    elif command -v wget > /dev/null 2>&1; then
+        _redirect="$(wget --spider --max-redirect=5 -S "$_url" 2>&1 | grep -i 'Location:' | tail -1 | awk '{print $2}' | tr -d '\r')"
+    else
+        err "need curl or wget to resolve latest version"
+    fi
+
+    # Extract version from redirect URL: .../tag/v0.4.2 → 0.4.2
+    local _ver
+    _ver="$(echo "$_redirect" | sed 's|.*/v||')"
+    if [ -z "$_ver" ]; then
+        err "could not determine latest version"
+    fi
+
+    printf '%s' "$_ver"
 }
 
 get_rid() {
