@@ -28,7 +28,7 @@ static class UpdateCommand
             tools = tools.Where(t => toolNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase)).ToList();
             var missing = toolNames.Where(n => !tools.Any(t => t.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToList();
             foreach (string name in missing)
-                Console.Error.WriteLine($"  {name}: not found or no update metadata");
+                Console.Error.WriteLine($"{name}: not found or no update metadata");
         }
 
         if (tools.Count == 0)
@@ -61,7 +61,7 @@ static class UpdateCommand
                     break;
 
                 default:
-                    Console.Error.WriteLine($"  {tool.Name}: unknown source type '{source.Type}'");
+                    Console.Error.WriteLine($"{tool.Name}: unknown source type '{source.Type}'");
                     failures++;
                     break;
             }
@@ -78,7 +78,7 @@ static class UpdateCommand
         string packageName = source.Package!;
         string installedVersion = source.Version!;
 
-        Console.Write($"  {tool.Name} ({packageName} {installedVersion})... ");
+        Console.Write($"{tool.Name} ({packageName} {installedVersion})... ");
 
         using var client = new HttpClient();
         var nuget = new NuGetClient(client);
@@ -98,7 +98,7 @@ static class UpdateCommand
 
         Console.WriteLine($"{installedVersion} -> {latestVersion}");
         return await Installer.InstallPackageAsync(
-            $"{packageName}@{latestVersion}", installDir, tool.Manifest.RollForward);
+            $"{packageName}@{latestVersion}", installDir, tool.Manifest.RollForward, quiet: true);
     }
 
     // ---- GitHub update ----
@@ -112,7 +112,7 @@ static class UpdateCommand
         string shortCommit = installedCommit is not null && installedCommit.Length >= 7
             ? installedCommit[..7] : installedCommit ?? "unknown";
 
-        Console.Write($"  {tool.Name} ({repository} {shortCommit})... ");
+        Console.Write($"{tool.Name} ({repository} {shortCommit})... ");
 
         // Resolve cache paths
         int slashIndex = repository.IndexOf('/');
@@ -127,7 +127,7 @@ static class UpdateCommand
         {
             Console.WriteLine("not cached, reinstalling");
             string spec = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-            return GitSource.InstallFromGit(spec, installDir, source.Ssh, source.Project);
+            return GitSource.InstallFromGit(spec, installDir, source.Ssh, source.Project, quiet: true);
         }
 
         // Fetch latest
@@ -164,7 +164,7 @@ static class UpdateCommand
         Console.WriteLine($"{shortCommit} -> {shortLatest}");
 
         string spec2 = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-        return GitSource.InstallFromGit(spec2, installDir, source.Ssh, source.Project);
+        return GitSource.InstallFromGit(spec2, installDir, source.Ssh, source.Project, quiet: true);
     }
 
     // ---- Local update ----
@@ -177,7 +177,7 @@ static class UpdateCommand
         string shortCommit = installedCommit is not null && installedCommit.Length >= 7
             ? installedCommit[..7] : installedCommit ?? "unknown";
 
-        Console.Write($"  {tool.Name} (local {shortCommit})... ");
+        Console.Write($"{tool.Name} (local {shortCommit})... ");
 
         if (!File.Exists(projectPath))
         {
@@ -224,7 +224,7 @@ static class UpdateCommand
             Commit = currentCommit
         };
 
-        return Installer.Install(projectPath, installDir, newSource);
+        return Installer.Install(projectPath, installDir, newSource, quiet: true);
     }
 
     // ---- Tool discovery ----

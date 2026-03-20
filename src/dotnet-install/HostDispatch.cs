@@ -11,10 +11,11 @@ static unsafe class HostDispatch
 {
     public static int Run(string toolName, string[] args)
     {
-        // Resolve the install directory from the invoked symlink path, not ProcessPath
-        // (ProcessPath resolves symlinks, losing the install directory context)
-        string invokedPath = Environment.GetCommandLineArgs()[0];
-        string? installDir = Path.GetDirectoryName(Path.GetFullPath(invokedPath));
+        // The symlink (e.g. dotnetsay) and dotnet-install live in the same directory.
+        // ProcessPath resolves the symlink to the actual binary, giving us the install dir.
+        // We can't use GetCommandLineArgs()[0] because argv[0] may be a bare name
+        // (e.g. "dotnetsay") which would resolve relative to CWD, not the install dir.
+        string? installDir = Path.GetDirectoryName(Environment.ProcessPath);
 
         if (installDir is null)
         {
@@ -59,18 +60,25 @@ static unsafe class HostDispatch
             var compat = RuntimeCompat.CheckCompatibility(runtimeConfig);
             if (!compat.CanRun)
             {
-                Console.Error.WriteLine($"error: {toolName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
-                Console.Error.WriteLine();
-
-                if (compat.RollForwardWouldHelp && !manifest.RollForward)
+                if (manifest.RollForward && compat.RollForwardWouldHelp)
                 {
-                    Console.Error.WriteLine("  A compatible runtime is available with roll-forward. Reinstall with:");
-                    Console.Error.WriteLine($"    dotnet install --package {toolName} --allow-roll-forward");
-                    Console.Error.WriteLine();
+                    // Roll-forward is enabled and a compatible runtime exists — proceed
                 }
+                else
+                {
+                    Console.Error.WriteLine($"error: {toolName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
+                    Console.Error.WriteLine();
 
-                Console.Error.WriteLine($"  Or install .NET {compat.RequiredVersion}: https://dot.net/download");
-                return 1;
+                    if (compat.RollForwardWouldHelp && !manifest.RollForward)
+                    {
+                        Console.Error.WriteLine("A compatible runtime is available with roll-forward. Reinstall with:");
+                        Console.Error.WriteLine($"  dotnet install --package {toolName} --allow-roll-forward");
+                        Console.Error.WriteLine();
+                    }
+
+                    Console.Error.WriteLine($"Or install .NET {compat.RequiredVersion}: https://dot.net/download");
+                    return 1;
+                }
             }
         }
 
@@ -80,11 +88,15 @@ static unsafe class HostDispatch
 
         if (manifest.RollForward)
         {
+            execArgs.Add("exec");
             execArgs.Add("--roll-forward");
-            execArgs.Add("Major");
+            execArgs.Add("LatestMajor");
+        }
+        else
+        {
+            execArgs.Add("exec");
         }
 
-        execArgs.Add("exec");
         execArgs.Add(entryDll);
         execArgs.AddRange(args);
 
@@ -148,7 +160,7 @@ static unsafe class HostDispatch
                 // execvp only returns on error
                 int errno = Marshal.GetLastPInvokeError();
                 Console.Error.WriteLine($"error: failed to exec dotnet (errno {errno})");
-                Console.Error.WriteLine("  Is .NET installed? https://dot.net/download");
+                Console.Error.WriteLine("Is .NET installed? https://dot.net/download");
                 return 1;
             }
             finally
@@ -176,7 +188,7 @@ static unsafe class HostDispatch
         if (process is null)
         {
             Console.Error.WriteLine("error: failed to start dotnet");
-            Console.Error.WriteLine("  Is .NET installed? https://dot.net/download");
+            Console.Error.WriteLine("Is .NET installed? https://dot.net/download");
             return 1;
         }
 

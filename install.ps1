@@ -23,9 +23,10 @@ $installDir = if ($env:DOTNET_INSTALL_DIR) {
     Join-Path $HOME ".dotnet" "bin"
 }
 
-$version = "0.1.1"
-$rid = "win-x64"
-$url = "$feed/v$version/dotnet-install-$version-$rid.zip"
+$version = "0.2.2"
+$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+$rid = if ($arch -eq [System.Runtime.InteropServices.Architecture]::Arm64) { "win-arm64" } else { "win-x64" }
+$url = "$feed/v$version/dotnet-install-$rid.zip"
 
 function New-TempFolder {
     $t = Join-Path ([System.IO.Path]::GetTempPath()) `

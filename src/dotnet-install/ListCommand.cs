@@ -1,10 +1,17 @@
+using System.Text.Json;
+using DotnetInstall.Json;
+using DotnetInstall.Views;
+using Markout;
+using Markout.Formatting;
+
 static class ListCommand
 {
-    public static int Run(string installDir)
+    public static int Run(string installDir, bool noHeader = false, string? columns = null, bool json = false)
     {
         if (!Directory.Exists(installDir))
         {
-            Console.WriteLine("No tools installed.");
+            if (json) Console.WriteLine("[]");
+            else Console.WriteLine("No tools installed.");
             return 0;
         }
 
@@ -16,22 +23,64 @@ static class ListCommand
 
         if (entries.Count == 0)
         {
-            Console.WriteLine("No tools installed.");
+            if (json) Console.WriteLine("[]");
+            else Console.WriteLine("No tools installed.");
             return 0;
         }
 
-        foreach (var entry in entries)
+        if (json)
         {
-            string name = entry.Name;
-            string? target = entry.LinkTarget;
-
-            if (target is not null)
-                Console.WriteLine($"  {name} -> {target}");
-            else
-                Console.WriteLine($"  {name}");
+            var jsonEntries = entries
+                .Select(e => new ToolListEntry(e.Name, GetToolType(e, installDir)))
+                .ToArray();
+            Console.WriteLine(JsonSerializer.Serialize(jsonEntries, InstallJsonContext.Default.ToolListEntryArray));
+            return 0;
         }
 
+        var view = new ToolListView
+        {
+            Tools = entries.Select(e => new ToolRow(e.Name, GetToolType(e, installDir))).ToList()
+        };
+
+        var writerOptions = new MarkoutWriterOptions();
+
+        if (columns is not null)
+        {
+            var cols = columns.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            writerOptions.Projection = MarkoutProjection.WithColumns(cols);
+        }
+
+        MarkoutSerializer.Serialize(view, Console.Out, new OneLineFormatter(showHeader: !noHeader), ToolListViewContext.Default, writerOptions);
+
         return 0;
+    }
+
+    static string GetToolType(FileInfo f, string installDir)
+    {
+        string toolName = Path.GetFileNameWithoutExtension(f.Name);
+
+        // Symlink to dotnet-install = CoreCLR (busybox host dispatch)
+        if (f.LinkTarget is not null)
+        {
+            string target = Path.GetFileName(f.LinkTarget);
+            if (target.StartsWith("dotnet-install"))
+                return "CoreCLR";
+        }
+
+        // Check the app directory for a managed entry point
+        string appDir = Path.Combine(installDir, $"_{toolName}");
+        if (Directory.Exists(appDir))
+        {
+            // Has a .dll = managed (self-contained CoreCLR or framework-dependent)
+            if (File.Exists(Path.Combine(appDir, $"{toolName}.dll")))
+                return "CoreCLR";
+
+            // Native multi-file (no .dll entry point)
+            return "NAOT";
+        }
+
+        // Direct executable, no app dir = NAOT single-file
+        return "NAOT";
     }
 
     static bool IsToolEntry(FileInfo f)

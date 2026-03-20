@@ -27,14 +27,14 @@ static class SourceLinkCheck
 
                 if (!reader.HasSourceLink)
                 {
-                    Console.Error.WriteLine($"  warning: {Path.GetFileName(dll)} has PDB but no SourceLink");
+                    Console.Error.WriteLine($"warning: {Path.GetFileName(dll)} has PDB but no SourceLink");
                     allPassed = false;
                     continue;
                 }
 
                 string repo = reader.RepositoryUrl ?? "unknown";
                 string commit = reader.CommitHash is { Length: > 7 } c ? c[..7] : "unknown";
-                Console.WriteLine($"  SourceLink: {Path.GetFileName(dll)} → {repo} ({commit})");
+                Console.WriteLine($"SourceLink: {Path.GetFileName(dll)} → {repo} ({commit})");
             }
             catch
             {
@@ -44,7 +44,7 @@ static class SourceLinkCheck
 
         if (!anyChecked)
         {
-            Console.Error.WriteLine("  warning: no assemblies with PDB data found for SourceLink verification");
+            Console.Error.WriteLine("warning: no assemblies with PDB data found for SourceLink verification");
             return false;
         }
 
