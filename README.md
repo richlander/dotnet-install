@@ -22,7 +22,7 @@ dotnet-install setup
 Unix:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf \
+curl --proto '=https' --tlsv1.2 -sSfL \
   https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
 ```
 

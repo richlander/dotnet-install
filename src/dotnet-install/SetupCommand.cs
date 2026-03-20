@@ -82,9 +82,21 @@ static class SetupCommand
             RedirectStandardError = true,
         };
 
-        using var checkProcess = Process.Start(checkPsi);
+        Process? checkProcess;
+        try
+        {
+            checkProcess = Process.Start(checkPsi);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // dotnet SDK not installed — nothing to shed
+            return false;
+        }
+
         if (checkProcess is null)
             return false;
+
+        using var _ = checkProcess;
 
         string output = checkProcess.StandardOutput.ReadToEnd();
         checkProcess.WaitForExit();

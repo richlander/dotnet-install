@@ -23,7 +23,25 @@ $installDir = if ($env:DOTNET_INSTALL_DIR) {
     Join-Path $HOME ".dotnet" "bin"
 }
 
-$version = "0.2.2"
+# Resolve latest version from GitHub Releases redirect
+$latestUrl = "https://github.com/richlander/dotnet-install/releases/latest"
+try {
+    $response = Invoke-WebRequest -Uri $latestUrl -MaximumRedirection 0 -ErrorAction SilentlyContinue
+} catch {
+    $response = $_.Exception.Response
+}
+$redirectUrl = if ($response.StatusCode -eq 301 -or $response.StatusCode -eq 302) {
+    $response.Headers.Location.ToString()
+} else {
+    # Follow redirects and use the final URL
+    $response = Invoke-WebRequest -Uri $latestUrl -MaximumRedirection 10
+    $response.BaseResponse.ResponseUri.ToString()
+}
+$version = ($redirectUrl -split '/v')[-1]
+if (-not $version) {
+    throw "Could not determine latest version"
+}
+
 $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 $rid = if ($arch -eq [System.Runtime.InteropServices.Architecture]::Arm64) { "win-arm64" } else { "win-x64" }
 $url = "$feed/v$version/dotnet-install-$rid.zip"
@@ -55,6 +73,12 @@ try {
         -Force | Out-Null
     $dest = Join-Path $installDir "dotnet-install.exe"
     Copy-Item $bin $dest -Force
+
+    # Write update metadata sidecar
+    $metaDir = Join-Path $installDir "_dotnet-install"
+    New-Item -ItemType Directory -Path $metaDir -Force | Out-Null
+    $metaJson = "{`"source`":{`"type`":`"github-release`",`"repository`":`"richlander/dotnet-install`",`"version`":`"$version`"},`"update`":{`"type`":`"nuget`",`"package`":`"dotnet-install`",`"version`":`"$version`"}}"
+    Set-Content -Path (Join-Path $metaDir ".tool.json") -Value $metaJson -NoNewline
 
     Write-Host "dotnet-install: installed to $dest"
 

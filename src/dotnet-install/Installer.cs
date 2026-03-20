@@ -11,7 +11,7 @@ static class Installer
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
 
-    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false)
+    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false, InstallSource? update = null)
     {
         // 1. Evaluate the project to read properties before building
         var info = EvaluateProject(projectFile);
@@ -83,7 +83,7 @@ static class Installer
             {
                 string metaDir = Path.Combine(installDir, $"_{appName}");
                 Directory.CreateDirectory(metaDir);
-                ToolMetadata.Write(metaDir, new ToolManifest { Source = source });
+                ToolMetadata.Write(metaDir, new ToolManifest { Source = source, Update = update });
             }
 
             string display = singleFile ? execName :
