@@ -179,10 +179,7 @@ static class InstallAction
                 return projects[0];
 
             if (projects.Length > 1)
-            {
-                Console.Error.WriteLine($"error: multiple project files found in '{path}'. Specify one explicitly.");
-                return null;
-            }
+                return ProjectSelector.Select([.. projects], path);
         }
 
         return null;

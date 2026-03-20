@@ -182,10 +182,7 @@ static class GitSource
             return null;
         }
 
-        Console.Error.WriteLine("error: multiple executable projects found. Use --project to specify:");
-        foreach (string p in exeProjects)
-            Console.Error.WriteLine($"  {Path.GetRelativePath(repoDir, p)}");
-        return null;
+        return ProjectSelector.Select(exeProjects, repoDir);
     }
 
     // ---- Process helpers ----
