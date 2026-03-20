@@ -71,11 +71,10 @@ static class CommandLineBuilder
 
         // --- Subcommands ---
 
-        var setupCommand = new Command("setup", "Configure shell PATH and create self-link");
-        setupCommand.SetAction((parseResult, ct) =>
+        var setupCommand = new Command("setup", "Configure shell PATH and install locally");
+        setupCommand.SetAction(async (parseResult, ct) =>
         {
-            SetupCommand.Run(Installer.DefaultInstallDir);
-            return Task.FromResult(0);
+            return await SetupCommand.Run(Installer.DefaultInstallDir);
         });
 
         var listNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };

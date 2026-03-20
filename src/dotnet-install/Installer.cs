@@ -473,26 +473,24 @@ static class Installer
             if (File.Exists(linkPath) || IsSymlink(linkPath))
                 File.Delete(linkPath);
 
-            string hostPath = Environment.ProcessPath
-                ?? Path.Combine(installDir, "dotnet-install");
-
-            // Prefer a dotnet-install binary already in installDir over ProcessPath,
-            // which may point elsewhere (e.g. dotnet tool .store). A local symlink
-            // is more resilient — it survives dotnet tool uninstall/update.
+            // Symlink to local dotnet-install. If it doesn't exist yet (e.g. first tool
+            // install via dotnet tool), HostDispatch's fallback to DefaultInstallDir
+            // handles runtime dispatch. Running `setup` completes the graduation.
             string localHost = Path.Combine(installDir, "dotnet-install");
-            if (!string.Equals(Path.GetFullPath(Path.GetDirectoryName(hostPath)!), Path.GetFullPath(installDir), StringComparison.Ordinal)
-                && File.Exists(localHost))
+            if (File.Exists(localHost))
             {
-                hostPath = localHost;
+                File.CreateSymbolicLink(linkPath, "dotnet-install");
             }
-
-            // Create relative symlink if both are in the same directory
-            string hostDir = Path.GetDirectoryName(hostPath)!;
-            string target = string.Equals(Path.GetFullPath(hostDir), Path.GetFullPath(installDir), StringComparison.Ordinal)
-                ? Path.GetFileName(hostPath)
-                : hostPath;
-
-            File.CreateSymbolicLink(linkPath, target);
+            else
+            {
+                // No local binary yet — create absolute symlink to ProcessPath as interim.
+                // `setup` will replace this with a proper local install.
+                string hostPath = Environment.ProcessPath
+                    ?? Path.Combine(installDir, "dotnet-install");
+                File.CreateSymbolicLink(linkPath, hostPath);
+                Console.WriteLine();
+                Console.WriteLine("  hint: run 'dotnet-install setup' to complete installation");
+            }
         }
     }
 
