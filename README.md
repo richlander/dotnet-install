@@ -158,7 +158,7 @@ No new properties required. Existing MSBuild properties control the output:
 
 ## Commands and options
 
-```
+```text
 dotnet-install [<project-path>] [command] [options]
 
 Commands:
