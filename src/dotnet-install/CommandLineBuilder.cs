@@ -78,10 +78,16 @@ static class CommandLineBuilder
             return Task.FromResult(0);
         });
 
+        var listOneLineOption = new Option<bool>("--oneline") { Description = "One tool per line, columnar output" };
+        var listNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
         var listCommand = new Command("list", "List installed tools");
+        listCommand.Options.Add(listOneLineOption);
+        listCommand.Options.Add(listNoHeaderOption);
         listCommand.SetAction((parseResult, ct) =>
         {
-            ListCommand.Run(Installer.DefaultInstallDir);
+            bool oneLine = parseResult.GetValue(listOneLineOption);
+            bool noHeader = parseResult.GetValue(listNoHeaderOption);
+            ListCommand.Run(Installer.DefaultInstallDir, oneLine, noHeader);
             return Task.FromResult(0);
         });
 
@@ -111,10 +117,37 @@ static class CommandLineBuilder
             return Task.FromResult(RemoveCommand.Run(Installer.DefaultInstallDir, tools));
         });
 
+        // Hidden "install" alias — install is the default action on the root command,
+        // but typing "dotnet-install install ..." is natural after using remove/update.
+        var installCommand = new Command("install", "Install a .NET tool") { Hidden = true };
+        installCommand.Arguments.Add(new Argument<string?>("project-path") { Arity = ArgumentArity.ZeroOrOne });
+        installCommand.Options.Add(packageOption);
+        installCommand.Options.Add(githubOption);
+        installCommand.Options.Add(projectOption);
+        installCommand.Options.Add(outputOption);
+        installCommand.Options.Add(localBinOption);
+        installCommand.Options.Add(sshOption);
+        installCommand.Options.Add(rollForwardOption);
+        installCommand.Options.Add(sourceLinkOption);
+        installCommand.SetAction(async (parseResult, ct) =>
+        {
+            return await InstallAction.RunAsync(
+                parseResult.GetValue<string?>("project-path"),
+                parseResult.GetValue(packageOption),
+                parseResult.GetValue(githubOption),
+                parseResult.GetValue(projectOption),
+                parseResult.GetValue(outputOption),
+                parseResult.GetValue(localBinOption),
+                parseResult.GetValue(sshOption),
+                parseResult.GetValue(rollForwardOption),
+                parseResult.GetValue(sourceLinkOption));
+        });
+
         rootCommand.Subcommands.Add(setupCommand);
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(updateCommand);
         rootCommand.Subcommands.Add(removeCommand);
+        rootCommand.Subcommands.Add(installCommand);
 
         // --- Default install action ---
 

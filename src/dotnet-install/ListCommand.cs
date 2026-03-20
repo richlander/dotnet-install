@@ -1,9 +1,10 @@
 using DotnetInstall.Views;
 using Markout;
+using Markout.Formatting;
 
 static class ListCommand
 {
-    public static int Run(string installDir)
+    public static int Run(string installDir, bool oneLine = false, bool noHeader = false)
     {
         if (!Directory.Exists(installDir))
         {
@@ -28,7 +29,11 @@ static class ListCommand
             Tools = entries.Select(e => new ToolRow(e.Name, e.LinkTarget)).ToList()
         };
 
-        MarkoutSerializer.Serialize(view, Console.Out, new PlainTextFormatter(), ToolListViewContext.Default);
+        IMarkoutFormatter formatter = oneLine
+            ? new OneLineFormatter(showHeader: !noHeader)
+            : new PlainTextFormatter();
+
+        MarkoutSerializer.Serialize(view, Console.Out, formatter, ToolListViewContext.Default);
 
         return 0;
     }
