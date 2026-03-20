@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install script for dotnet-install.
-# Usage: curl --proto '=https' --tlsv1.2 -sSf https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
+# Usage: curl --proto '=https' --tlsv1.2 -sSfL https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
 #
 # Downloads a pre-built Native AOT binary from GitHub Releases,
 # places it in ~/.dotnet/bin/, and runs `dotnet-install setup`
@@ -58,6 +58,11 @@ main() {
     rm -f "$INSTALL_DIR/dotnet-install"
     ensure cp "$_bin" "$INSTALL_DIR/dotnet-install"
     ensure chmod +x "$INSTALL_DIR/dotnet-install"
+
+    # Write update metadata sidecar
+    local _meta_dir="$INSTALL_DIR/_dotnet-install"
+    ensure mkdir -p "$_meta_dir"
+    printf '{"source":{"type":"github-release","repository":"richlander/dotnet-install","version":"%s"},"update":{"type":"nuget","package":"dotnet-install","version":"%s"}}' "$_version" "$_version" > "$_meta_dir/.tool.json"
 
     say "installed to ${INSTALL_DIR}/dotnet-install"
 

@@ -84,6 +84,9 @@ static class GitSource
         // Capture commit SHA for provenance tracking
         string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
 
+        // Read repo config (.dotnet-install.json) for exe name and update plan
+        var config = ToolConfig.Read(repoDir);
+
         // Discover project
         string? projectFile = DiscoverProject(repoDir, projectOverride);
         if (projectFile is null)
@@ -99,7 +102,7 @@ static class GitSource
             Project = projectOverride
         };
 
-        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet);
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
     }
 
     // ---- Project discovery ----

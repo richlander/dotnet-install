@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using NuGetFetch;
 
 static class UpdateCommand
@@ -41,22 +42,28 @@ static class UpdateCommand
 
         foreach (var tool in tools)
         {
-            var source = tool.Manifest.Source!;
+            // Prefer update channel over install source (e.g., installed from GitHub, updates from NuGet)
+            var source = tool.Manifest.Update ?? tool.Manifest.Source!;
 
             switch (source.Type)
             {
                 case "nuget":
-                    if (await UpdateNuGetAsync(tool, installDir) != 0)
+                    if (await UpdateNuGetAsync(tool, source, installDir) != 0)
                         failures++;
                     break;
 
                 case "github":
-                    if (UpdateGitHub(tool, installDir) != 0)
+                    if (UpdateGitHub(tool, source, installDir) != 0)
                         failures++;
                     break;
 
                 case "local":
-                    if (UpdateLocal(tool, installDir) != 0)
+                    if (UpdateLocal(tool, source, installDir) != 0)
+                        failures++;
+                    break;
+
+                case "github-release":
+                    if (await UpdateGitHubReleaseAsync(tool, source, installDir) != 0)
                         failures++;
                     break;
 
@@ -72,11 +79,10 @@ static class UpdateCommand
 
     // ---- NuGet update ----
 
-    static async Task<int> UpdateNuGetAsync(ToolInfo tool, string installDir)
+    static async Task<int> UpdateNuGetAsync(ToolInfo tool, InstallSource source, string installDir)
     {
-        var source = tool.Manifest.Source!;
         string packageName = source.Package!;
-        string installedVersion = source.Version!;
+        string installedVersion = source.Version ?? "unknown";
 
         Console.Write($"{tool.Name} ({packageName} {installedVersion})... ");
 
@@ -97,15 +103,29 @@ static class UpdateCommand
         }
 
         Console.WriteLine($"{installedVersion} -> {latestVersion}");
-        return await Installer.InstallPackageAsync(
+        int result = await Installer.InstallPackageAsync(
             $"{packageName}@{latestVersion}", installDir, tool.Manifest.RollForward, quiet: true);
+
+        // Preserve the update plan in metadata (InstallPackageAsync wrote source only)
+        if (result == 0 && tool.Manifest.Update is not null)
+        {
+            string metaDir = Path.Combine(installDir, $"_{tool.Name}");
+            var manifest = ToolMetadata.Read(metaDir);
+            if (manifest is not null)
+            {
+                manifest.Update = tool.Manifest.Update;
+                manifest.Update.Version = latestVersion;
+                ToolMetadata.Write(metaDir, manifest);
+            }
+        }
+
+        return result;
     }
 
     // ---- GitHub update ----
 
-    static int UpdateGitHub(ToolInfo tool, string installDir)
+    static int UpdateGitHub(ToolInfo tool, InstallSource source, string installDir)
     {
-        var source = tool.Manifest.Source!;
         string repository = source.Repository!;
         string? gitRef = source.Ref;
         string? installedCommit = source.Commit;
@@ -169,9 +189,8 @@ static class UpdateCommand
 
     // ---- Local update ----
 
-    static int UpdateLocal(ToolInfo tool, string installDir)
+    static int UpdateLocal(ToolInfo tool, InstallSource source, string installDir)
     {
-        var source = tool.Manifest.Source!;
         string projectPath = source.Project!;
         string? installedCommit = source.Commit;
         string shortCommit = installedCommit is not null && installedCommit.Length >= 7
@@ -225,6 +244,152 @@ static class UpdateCommand
         };
 
         return Installer.Install(projectPath, installDir, newSource, quiet: true);
+    }
+
+    // ---- GitHub Release update ----
+
+    static async Task<int> UpdateGitHubReleaseAsync(ToolInfo tool, InstallSource source, string installDir)
+    {
+        string repository = source.Repository!;
+        string installedVersion = source.Version ?? "unknown";
+
+        Console.Write($"{tool.Name} ({repository} {installedVersion})... ");
+
+        // Resolve latest version from GitHub Releases
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Add("User-Agent", "dotnet-install");
+
+        string latestUrl = $"https://github.com/{repository}/releases/latest";
+        var request = new HttpRequestMessage(HttpMethod.Head, latestUrl);
+        var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+        string? effectiveUrl = response.RequestMessage?.RequestUri?.ToString();
+        if (effectiveUrl is null || !effectiveUrl.Contains("/tag/"))
+        {
+            Console.WriteLine("could not resolve latest version");
+            return 1;
+        }
+
+        // Extract version from .../tag/v0.4.4
+        int tagIndex = effectiveUrl.LastIndexOf("/v", StringComparison.Ordinal);
+        if (tagIndex < 0)
+        {
+            Console.WriteLine("could not parse version from tag");
+            return 1;
+        }
+
+        string latestVersion = effectiveUrl[(tagIndex + 2)..];
+
+        if (string.Equals(latestVersion, installedVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("up to date");
+            return 0;
+        }
+
+        Console.WriteLine($"{installedVersion} -> {latestVersion}");
+
+        // Download and extract
+        string rid = RuntimeInformation.RuntimeIdentifier;
+        bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        string ext = isWindows ? "zip" : "tar.gz";
+        string assetUrl = $"https://github.com/{repository}/releases/download/v{latestVersion}/{tool.Name}-{rid}.{ext}";
+
+        string tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-install-update-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            string archivePath = Path.Combine(tempDir, $"{tool.Name}.{ext}");
+
+            using (var archiveStream = await client.GetStreamAsync(assetUrl))
+            using (var fileStream = File.Create(archivePath))
+            {
+                await archiveStream.CopyToAsync(fileStream);
+            }
+
+            // Extract
+            if (isWindows)
+            {
+                System.IO.Compression.ZipFile.ExtractToDirectory(archivePath, tempDir);
+            }
+            else
+            {
+                var psi = new ProcessStartInfo("tar", ["-xzf", archivePath, "-C", tempDir])
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                using var p = Process.Start(psi)!;
+                p.WaitForExit();
+                if (p.ExitCode != 0)
+                {
+                    Console.Error.WriteLine($"  extract failed");
+                    return 1;
+                }
+            }
+
+            // Find the binary
+            string binaryName = isWindows ? $"{tool.Name}.exe" : tool.Name;
+            string extractedBinary = Path.Combine(tempDir, binaryName);
+            if (!File.Exists(extractedBinary))
+            {
+                Console.Error.WriteLine($"  binary not found in archive");
+                return 1;
+            }
+
+            // Replace the binary (rename-then-copy to handle self-update "text file busy")
+            string targetBinary = Path.Combine(installDir, binaryName);
+            string backupBinary = targetBinary + ".old";
+
+            try { File.Delete(backupBinary); } catch { }
+
+            if (File.Exists(targetBinary))
+            {
+                try
+                {
+                    File.Move(targetBinary, backupBinary);
+                }
+                catch (IOException)
+                {
+                    // On some systems even rename fails; proceed with copy attempt
+                }
+            }
+
+            File.Copy(extractedBinary, targetBinary, overwrite: true);
+
+            if (!isWindows)
+            {
+                File.SetUnixFileMode(targetBinary,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
+
+            try { File.Delete(backupBinary); } catch { }
+
+            // Update metadata
+            string toolDir = Path.Combine(installDir, $"_{tool.Name}");
+            ToolMetadata.Write(toolDir, new ToolManifest
+            {
+                Source = new InstallSource
+                {
+                    Type = "github-release",
+                    Repository = repository,
+                    Version = latestVersion
+                }
+            });
+
+            return 0;
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.Error.WriteLine($"  download failed: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
     }
 
     // ---- Tool discovery ----

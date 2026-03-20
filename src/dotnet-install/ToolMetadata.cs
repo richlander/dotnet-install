@@ -49,6 +49,14 @@ class ToolManifest
     [JsonPropertyName("source")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public InstallSource? Source { get; set; }
+
+    /// <summary>
+    /// Preferred update channel, overrides Source for updates.
+    /// Set by repo config (.dotnet-install.json) or install scripts.
+    /// </summary>
+    [JsonPropertyName("update")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public InstallSource? Update { get; set; }
 }
 
 /// <summary>
@@ -57,7 +65,7 @@ class ToolManifest
 /// </summary>
 class InstallSource
 {
-    /// <summary>"nuget", "github", or "local"</summary>
+    /// <summary>"nuget", "github", "local", or "github-release"</summary>
     [JsonPropertyName("type")]
     public string Type { get; set; } = "";
 
@@ -99,5 +107,48 @@ class InstallSource
     public string? Project { get; set; }
 }
 
+/// <summary>
+/// Repo-level config file (.dotnet-install.json) that tool authors place
+/// in their repository root. Declares the tool's exe name and update plan.
+/// </summary>
+class ToolConfig
+{
+    const string FileName = ".dotnet-install.json";
+
+    /// <summary>The executable/command name this tool produces.</summary>
+    [JsonPropertyName("exe")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Exe { get; set; }
+
+    /// <summary>Preferred update channel (e.g., NuGet package).</summary>
+    [JsonPropertyName("update")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public InstallSource? Update { get; set; }
+
+    /// <summary>
+    /// Read config from a directory (typically repo root). Returns null if not found.
+    /// </summary>
+    internal static ToolConfig? Read(string directory)
+    {
+        string path = Path.Combine(directory, FileName);
+        if (!File.Exists(path)) return null;
+
+        try
+        {
+            string json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize(json, ToolConfigContext.Default.ToolConfig);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+}
+
 [JsonSerializable(typeof(ToolManifest))]
+[JsonSerializable(typeof(ToolConfig))]
 partial class ToolManifestContext : JsonSerializerContext { }
+
+// Keep backward-compatible name; ToolConfig uses same context
+[JsonSerializable(typeof(ToolConfig))]
+partial class ToolConfigContext : JsonSerializerContext { }

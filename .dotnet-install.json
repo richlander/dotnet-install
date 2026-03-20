@@ -1,0 +1,7 @@
+{
+  "exe": "dotnet-install",
+  "update": {
+    "type": "nuget",
+    "package": "dotnet-install"
+  }
+}

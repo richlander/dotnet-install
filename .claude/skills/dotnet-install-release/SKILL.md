@@ -78,7 +78,7 @@ gh release view vX.Y.Z -R richlander/dotnet-install
 dotnet package search dotnet-install --source https://api.nuget.org/v3/index.json
 
 # Test install.sh (resolves latest automatically)
-curl -sSf https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
+curl -sSfL https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
 ```
 
 ## CI artifacts
