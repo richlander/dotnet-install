@@ -82,7 +82,9 @@ static class UpdateCommand
     static async Task<int> UpdateNuGetAsync(ToolInfo tool, InstallSource source, string installDir)
     {
         string packageName = source.Package!;
-        string installedVersion = source.Version ?? "unknown";
+
+        // Use the best known installed version across source and update plan
+        string installedVersion = GetInstalledVersion(tool) ?? "unknown";
 
         Console.Write($"{tool.Name} ({packageName} {installedVersion})... ");
 
@@ -96,7 +98,7 @@ static class UpdateCommand
             return 1;
         }
 
-        if (string.Equals(latestVersion, installedVersion, StringComparison.OrdinalIgnoreCase))
+        if (!IsNewer(latestVersion, installedVersion))
         {
             Console.WriteLine("up to date");
             return 0;
@@ -251,7 +253,7 @@ static class UpdateCommand
     static async Task<int> UpdateGitHubReleaseAsync(ToolInfo tool, InstallSource source, string installDir)
     {
         string repository = source.Repository!;
-        string installedVersion = source.Version ?? "unknown";
+        string installedVersion = GetInstalledVersion(tool) ?? "unknown";
 
         Console.Write($"{tool.Name} ({repository} {installedVersion})... ");
 
@@ -280,7 +282,7 @@ static class UpdateCommand
 
         string latestVersion = effectiveUrl[(tagIndex + 2)..];
 
-        if (string.Equals(latestVersion, installedVersion, StringComparison.OrdinalIgnoreCase))
+        if (!IsNewer(latestVersion, installedVersion))
         {
             Console.WriteLine("up to date");
             return 0;
@@ -390,6 +392,51 @@ static class UpdateCommand
         {
             try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
+    }
+
+    // ---- Version helpers ----
+
+    /// <summary>
+    /// Returns the best known installed version by checking both Source and Update metadata.
+    /// </summary>
+    static string? GetInstalledVersion(ToolInfo tool)
+    {
+        string? sourceVer = tool.Manifest.Source?.Version;
+        string? updateVer = tool.Manifest.Update?.Version;
+
+        if (sourceVer is null) return updateVer;
+        if (updateVer is null) return sourceVer;
+
+        // Return the higher of the two
+        if (TryParseVersion(sourceVer, out var sv) && TryParseVersion(updateVer, out var uv))
+            return sv >= uv ? sourceVer : updateVer;
+
+        return sourceVer;
+    }
+
+    /// <summary>
+    /// Returns true only if latest is strictly newer than installed.
+    /// Prevents downgrades when switching update channels.
+    /// </summary>
+    static bool IsNewer(string latest, string installed)
+    {
+        if (string.Equals(latest, installed, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (TryParseVersion(latest, out var lv) && TryParseVersion(installed, out var iv))
+            return lv > iv;
+
+        // Can't parse — fall back to string inequality (assume newer)
+        return true;
+    }
+
+    static bool TryParseVersion(string s, out Version version)
+    {
+        // Strip leading 'v' if present
+        if (s.Length > 0 && s[0] == 'v')
+            s = s[1..];
+
+        return Version.TryParse(s, out version!);
     }
 
     // ---- Tool discovery ----
