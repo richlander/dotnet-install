@@ -81,6 +81,7 @@ static class CommandLineBuilder
         var listOneLineOption = new Option<bool>("--oneline") { Description = "One tool per line, columnar output" };
         var listNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
         var listCommand = new Command("list", "List installed tools");
+        listCommand.Aliases.Add("ls");
         listCommand.Options.Add(listOneLineOption);
         listCommand.Options.Add(listNoHeaderOption);
         listCommand.SetAction((parseResult, ct) =>
@@ -110,6 +111,7 @@ static class CommandLineBuilder
             Arity = ArgumentArity.OneOrMore
         };
         var removeCommand = new Command("remove", "Remove installed tools");
+        removeCommand.Aliases.Add("rm");
         removeCommand.Arguments.Add(removeToolsArg);
         removeCommand.SetAction((parseResult, ct) =>
         {
