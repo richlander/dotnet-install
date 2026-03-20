@@ -476,6 +476,16 @@ static class Installer
             string hostPath = Environment.ProcessPath
                 ?? Path.Combine(installDir, "dotnet-install");
 
+            // Prefer a dotnet-install binary already in installDir over ProcessPath,
+            // which may point elsewhere (e.g. dotnet tool .store). A local symlink
+            // is more resilient — it survives dotnet tool uninstall/update.
+            string localHost = Path.Combine(installDir, "dotnet-install");
+            if (!string.Equals(Path.GetFullPath(Path.GetDirectoryName(hostPath)!), Path.GetFullPath(installDir), StringComparison.Ordinal)
+                && File.Exists(localHost))
+            {
+                hostPath = localHost;
+            }
+
             // Create relative symlink if both are in the same directory
             string hostDir = Path.GetDirectoryName(hostPath)!;
             string target = string.Equals(Path.GetFullPath(hostDir), Path.GetFullPath(installDir), StringComparison.Ordinal)

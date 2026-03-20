@@ -11,10 +11,11 @@ static unsafe class HostDispatch
 {
     public static int Run(string toolName, string[] args)
     {
-        // The symlink (e.g. dotnetsay) and dotnet-install live in the same directory.
-        // ProcessPath resolves the symlink to the actual binary, giving us the install dir.
-        // We can't use GetCommandLineArgs()[0] because argv[0] may be a bare name
-        // (e.g. "dotnetsay") which would resolve relative to CWD, not the install dir.
+        // Resolve the install directory where tool data (_toolname/) lives.
+        // Normally, ProcessPath gives us the binary's directory, which is the install dir.
+        // However, when dotnet-install is installed via `dotnet tool install -g`, ProcessPath
+        // resolves to the deep .store path while tool data is in DefaultInstallDir (~/.dotnet/bin).
+        // Fall back to DefaultInstallDir when the tool data isn't co-located with the binary.
         string? installDir = Path.GetDirectoryName(Environment.ProcessPath);
 
         if (installDir is null)
@@ -27,8 +28,20 @@ static unsafe class HostDispatch
 
         if (!Directory.Exists(appDir))
         {
-            Console.Error.WriteLine($"error: tool '{toolName}' is not installed (missing {appDir})");
-            return 1;
+            // ProcessPath may point elsewhere (e.g. dotnet tool .store); try DefaultInstallDir
+            string defaultDir = Installer.DefaultInstallDir;
+            string fallbackAppDir = Path.Combine(defaultDir, $"_{toolName}");
+
+            if (Directory.Exists(fallbackAppDir))
+            {
+                installDir = defaultDir;
+                appDir = fallbackAppDir;
+            }
+            else
+            {
+                Console.Error.WriteLine($"error: tool '{toolName}' is not installed (missing {appDir})");
+                return 1;
+            }
         }
 
         // Read tool metadata
