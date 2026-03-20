@@ -24,6 +24,7 @@ static class Installer
 
         string appName = info.AssemblyName;
         string mode = info.IsNativeAot ? "Native AOT" :
+                      info.IsSelfContained ? "self-contained" :
                       info.IsSingleFile ? "single-file" : "framework-dependent";
 
         // Pre-flight: warn if the project's TFM may not be buildable
@@ -41,7 +42,7 @@ static class Installer
 
         try
         {
-            if (!Publish(projectFile, tempDir))
+            if (!Publish(projectFile, tempDir, info.IsSelfContained))
             {
                 Console.Error.WriteLine("error: publish failed");
                 return 1;
@@ -521,7 +522,7 @@ static class Installer
     // Parses the .csproj directly instead of using the MSBuild API.
     // This avoids assembly loading conflicts and is fully Native AOT compatible.
 
-    record ProjectInfo(string AssemblyName, string OutputType, bool IsNativeAot, bool IsSingleFile, string? TargetFramework);
+    record ProjectInfo(string AssemblyName, string OutputType, bool IsNativeAot, bool IsSingleFile, bool IsSelfContained, string? TargetFramework);
 
     static ProjectInfo EvaluateProject(string projectFile)
     {
@@ -533,11 +534,14 @@ static class Installer
         if (string.IsNullOrEmpty(assemblyName))
             assemblyName = Path.GetFileNameWithoutExtension(projectFile);
 
+        bool isNativeAot = IsPropertyTrue(props, "PublishAot");
+
         return new ProjectInfo(
             AssemblyName: assemblyName,
             OutputType: GetProperty(props, "OutputType") ?? "Library",
-            IsNativeAot: IsPropertyTrue(props, "PublishAot"),
+            IsNativeAot: isNativeAot,
             IsSingleFile: IsPropertyTrue(props, "PublishSingleFile"),
+            IsSelfContained: isNativeAot || IsPropertyTrue(props, "SelfContained"),
             TargetFramework: GetProperty(props, "TargetFramework")
         );
     }
@@ -595,7 +599,7 @@ static class Installer
 
     // ---- Publish (out-of-process) ----
 
-    static bool Publish(string projectFile, string outputDir)
+    static bool Publish(string projectFile, string outputDir, bool selfContained = true)
     {
         string fullProjectPath = Path.GetFullPath(projectFile);
         string projectDir = Path.GetDirectoryName(fullProjectPath)!;
@@ -615,7 +619,8 @@ static class Installer
         psi.ArgumentList.Add("Release");
         psi.ArgumentList.Add("-r");
         psi.ArgumentList.Add(rid);
-        psi.ArgumentList.Add("--self-contained");
+        if (selfContained)
+            psi.ArgumentList.Add("--self-contained");
         psi.ArgumentList.Add("-o");
         psi.ArgumentList.Add(outputDir);
 
