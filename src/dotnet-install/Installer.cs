@@ -623,6 +623,7 @@ static class Installer
         // Single-file = only one significant file (ignoring debug symbols and tool metadata)
         var files = Directory.GetFiles(publishDir)
             .Where(f => !f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
+                      && !f.EndsWith(".dbg", StringComparison.OrdinalIgnoreCase)
                       && !Path.GetFileName(f).Equals("DotnetToolSettings.xml", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
