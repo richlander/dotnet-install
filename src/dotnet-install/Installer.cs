@@ -11,7 +11,7 @@ static class Installer
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
 
-    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false)
+    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false)
     {
         // 1. Evaluate the project to read properties before building
         var info = EvaluateProject(projectFile);
@@ -30,8 +30,11 @@ static class Installer
         if (info.TargetFramework is not null)
             CheckSdkCompatibility(info.TargetFramework);
 
-        Console.WriteLine($"Installing {appName} to {installDir}");
-        Console.WriteLine($"Publishing ({mode}, Release)...");
+        if (!quiet)
+        {
+            Console.WriteLine($"Installing {appName} to {installDir}");
+            Console.WriteLine($"Publishing ({mode}, Release)...");
+        }
 
         // 2. Execute the Publish target via MSBuild API
         string tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-install-{Path.GetRandomFileName()}");
@@ -84,7 +87,8 @@ static class Installer
 
             string display = singleFile ? execName :
                              OperatingSystem.IsWindows() ? $"{appName}.cmd" : execName;
-            Console.WriteLine($"Installed {appName} → {Path.Combine(installDir, display)}");
+            if (!quiet)
+                Console.WriteLine($"Installed {appName} → {Path.Combine(installDir, display)}");
 
             return 0;
         }
@@ -101,7 +105,7 @@ static class Installer
 
     // ---- Package install ----
 
-    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir, bool allowRollForward = false, bool requireSourceLink = false)
+    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir, bool allowRollForward = false, bool requireSourceLink = false, bool quiet = false)
     {
         // Parse name[@version]
         var parsed = PackageExtractor.ParsePackageReference(packageSpec);
@@ -114,8 +118,11 @@ static class Installer
         string packageName = parsed.Id;
         string? version = string.IsNullOrEmpty(parsed.Version) ? null : parsed.Version;
 
-        Console.WriteLine($"Installing {packageName}{(version is not null ? $" ({version})" : "")} to {installDir}");
-        Console.WriteLine("Downloading...");
+        if (!quiet)
+        {
+            Console.WriteLine($"Installing {packageName}{(version is not null ? $" ({version})" : "")} to {installDir}");
+            Console.WriteLine("Downloading...");
+        }
 
         using var client = new HttpClient();
         var nuget = new NuGetClient(client);
@@ -138,7 +145,7 @@ static class Installer
 
         if (cachedPath is not null)
         {
-            Console.WriteLine($"Using cached {packageName} {version}");
+            if (!quiet) Console.WriteLine($"Using cached {packageName} {version}");
             extractPath = cachedPath;
         }
         else
@@ -182,7 +189,7 @@ static class Installer
             switch (sigResult.Status)
             {
                 case SignatureStatus.Valid:
-                    PrintSignature(sigResult);
+                    if (!quiet) PrintSignature(sigResult);
                     break;
                 case SignatureStatus.Unsigned:
                     Console.Error.WriteLine("warning: package is not signed");
@@ -328,7 +335,7 @@ static class Installer
             }
 
             string versionDisplay = version is not null ? $" ({version})" : "";
-            Console.WriteLine($"Installed {commandName}{versionDisplay} → {Path.Combine(installDir, commandName)}");
+            if (!quiet) Console.WriteLine($"Installed {commandName}{versionDisplay} → {Path.Combine(installDir, commandName)}");
             return 0;
         }
         finally

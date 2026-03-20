@@ -98,7 +98,7 @@ static class UpdateCommand
 
         Console.WriteLine($"{installedVersion} -> {latestVersion}");
         return await Installer.InstallPackageAsync(
-            $"{packageName}@{latestVersion}", installDir, tool.Manifest.RollForward);
+            $"{packageName}@{latestVersion}", installDir, tool.Manifest.RollForward, quiet: true);
     }
 
     // ---- GitHub update ----
@@ -127,7 +127,7 @@ static class UpdateCommand
         {
             Console.WriteLine("not cached, reinstalling");
             string spec = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-            return GitSource.InstallFromGit(spec, installDir, source.Ssh, source.Project);
+            return GitSource.InstallFromGit(spec, installDir, source.Ssh, source.Project, quiet: true);
         }
 
         // Fetch latest
@@ -164,7 +164,7 @@ static class UpdateCommand
         Console.WriteLine($"{shortCommit} -> {shortLatest}");
 
         string spec2 = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-        return GitSource.InstallFromGit(spec2, installDir, source.Ssh, source.Project);
+        return GitSource.InstallFromGit(spec2, installDir, source.Ssh, source.Project, quiet: true);
     }
 
     // ---- Local update ----
@@ -224,7 +224,7 @@ static class UpdateCommand
             Commit = currentCommit
         };
 
-        return Installer.Install(projectPath, installDir, newSource);
+        return Installer.Install(projectPath, installDir, newSource, quiet: true);
     }
 
     // ---- Tool discovery ----

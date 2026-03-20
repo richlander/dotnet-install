@@ -9,7 +9,7 @@ static class GitSource
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".nuget", "git-tools");
 
-    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? projectOverride, bool requireSourceLink = false)
+    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
     {
         // Parse owner/repo[@ref]
         int atIndex = spec.IndexOf('@');
@@ -46,13 +46,13 @@ static class GitSource
 
         if (isExistingClone)
         {
-            Console.WriteLine($"Fetching {owner}/{repo}...");
+            if (!quiet) Console.WriteLine($"Fetching {owner}/{repo}...");
             if (Run("git", ["-C", repoDir, "fetch", "origin"]) != 0)
                 return 1;
         }
         else
         {
-            Console.WriteLine($"Cloning {owner}/{repo}...");
+            if (!quiet) Console.WriteLine($"Cloning {owner}/{repo}...");
             if (Run("git", ["clone", cloneUrl, repoDir]) != 0)
                 return 1;
         }
@@ -60,7 +60,7 @@ static class GitSource
         // Checkout ref
         if (gitRef is not null)
         {
-            Console.WriteLine($"Checking out {gitRef}...");
+            if (!quiet) Console.WriteLine($"Checking out {gitRef}...");
             if (Run("git", ["-C", repoDir, "checkout", gitRef]) != 0)
             {
                 if (Run("git", ["-C", repoDir, "checkout", "--detach", $"origin/{gitRef}"]) != 0)
@@ -99,7 +99,7 @@ static class GitSource
             Project = projectOverride
         };
 
-        return Installer.Install(projectFile, installDir, source, requireSourceLink);
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet);
     }
 
     // ---- Project discovery ----
