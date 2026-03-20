@@ -166,20 +166,28 @@ static class InstallAction
 
     static string? FindProjectFile(string path)
     {
-        if (File.Exists(path) && IsProjectFile(path))
+        if (File.Exists(path) && (IsProjectFile(path) || Installer.IsFileBasedApp(path)))
             return Path.GetFullPath(path);
 
         if (Directory.Exists(path))
         {
             var projects = Directory.GetFiles(path, "*.*proj")
                 .Where(IsProjectFile)
-                .ToArray();
+                .ToList();
 
-            if (projects.Length == 1)
+            // Also check for file-based apps if no project files found
+            if (projects.Count == 0)
+            {
+                projects = Directory.GetFiles(path, "*.cs")
+                    .Where(f => Installer.ParseFileBasedProperties(f).Count > 0)
+                    .ToList();
+            }
+
+            if (projects.Count == 1)
                 return projects[0];
 
-            if (projects.Length > 1)
-                return ProjectSelector.Select([.. projects], path);
+            if (projects.Count > 1)
+                return ProjectSelector.Select(projects, path);
         }
 
         return null;

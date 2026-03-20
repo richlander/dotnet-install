@@ -142,6 +142,7 @@ static class GitSource
         }
 
         // 3. Auto-detect: find project files with OutputType=Exe (excluding test projects)
+        //    Also detect file-based apps (.cs files with #:property directives)
         List<string> exeProjects = [];
 
         foreach (string csproj in Directory.EnumerateFiles(repoDir, "*.*proj", SearchOption.AllDirectories))
@@ -170,6 +171,22 @@ static class GitSource
             catch
             {
                 // Skip unparseable project files
+            }
+        }
+
+        // Scan for file-based apps (.cs files with #:property directives)
+        if (exeProjects.Count == 0)
+        {
+            foreach (string csFile in Directory.EnumerateFiles(repoDir, "*.cs", SearchOption.AllDirectories))
+            {
+                // Skip files in obj/bin directories
+                string relativePath = Path.GetRelativePath(repoDir, csFile);
+                if (relativePath.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
+                    relativePath.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+                    continue;
+
+                if (Installer.IsFileBasedApp(csFile) && Installer.ParseFileBasedProperties(csFile).Count > 0)
+                    exeProjects.Add(csFile);
             }
         }
 

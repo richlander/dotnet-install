@@ -526,14 +526,17 @@ static class Installer
         SetExecutable(Path.Combine(appDir, execName));
     }
 
-    // ---- Project evaluation (direct XML parsing) ----
-    // Parses the .csproj directly instead of using the MSBuild API.
+    // ---- Project evaluation ----
+    // Parses .csproj (XML) or file-based apps (.cs with #:property directives).
     // This avoids assembly loading conflicts and is fully Native AOT compatible.
 
     record ProjectInfo(string AssemblyName, string OutputType, bool IsNativeAot, bool IsSingleFile, bool IsSelfContained, string? TargetFramework);
 
     static ProjectInfo EvaluateProject(string projectFile)
     {
+        if (IsFileBasedApp(projectFile))
+            return EvaluateFileBasedApp(projectFile);
+
         var doc = XDocument.Load(projectFile);
         var props = doc.Descendants()
             .Where(e => e.Parent?.Name.LocalName == "PropertyGroup");
@@ -553,6 +556,68 @@ static class Installer
             TargetFramework: GetProperty(props, "TargetFramework")
         );
     }
+
+    /// <summary>
+    /// Evaluates a file-based app (.cs file with #:property directives).
+    /// File-based apps are implicitly executables.
+    /// </summary>
+    static ProjectInfo EvaluateFileBasedApp(string csFile)
+    {
+        var properties = ParseFileBasedProperties(csFile);
+
+        string assemblyName = properties.GetValueOrDefault("ToolCommandName")
+            ?? properties.GetValueOrDefault("AssemblyName")
+            ?? Path.GetFileNameWithoutExtension(csFile);
+
+        return new ProjectInfo(
+            AssemblyName: assemblyName,
+            OutputType: "Exe",
+            IsNativeAot: string.Equals(properties.GetValueOrDefault("PublishAot"), "true", StringComparison.OrdinalIgnoreCase),
+            IsSingleFile: string.Equals(properties.GetValueOrDefault("PublishSingleFile"), "true", StringComparison.OrdinalIgnoreCase),
+            IsSelfContained: string.Equals(properties.GetValueOrDefault("SelfContained"), "true", StringComparison.OrdinalIgnoreCase),
+            TargetFramework: properties.GetValueOrDefault("TargetFramework")
+        );
+    }
+
+    /// <summary>
+    /// Parses #:property directives from a .cs file.
+    /// Format: #:property Name=Value
+    /// </summary>
+    internal static Dictionary<string, string> ParseFileBasedProperties(string csFile)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (string line in File.ReadLines(csFile))
+        {
+            // Directives must appear before code; stop at first non-directive, non-comment, non-blank line
+            string trimmed = line.TrimStart();
+            if (trimmed.Length == 0 || trimmed.StartsWith("//") || trimmed.StartsWith("#!"))
+                continue;
+            if (!trimmed.StartsWith("#:"))
+                break;
+
+            // #:property Name=Value
+            if (trimmed.StartsWith("#:property ", StringComparison.OrdinalIgnoreCase))
+            {
+                string rest = trimmed["#:property ".Length..];
+                int eq = rest.IndexOf('=');
+                if (eq > 0)
+                {
+                    string name = rest[..eq].Trim();
+                    string value = rest[(eq + 1)..].Trim();
+                    properties[name] = value;
+                }
+            }
+        }
+
+        return properties;
+    }
+
+    /// <summary>
+    /// Returns true if the file is a .cs file-based app (has #:property directives).
+    /// </summary>
+    internal static bool IsFileBasedApp(string path) =>
+        path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
 
     static string? GetProperty(IEnumerable<XElement> props, string name) =>
         props.FirstOrDefault(e => e.Name.LocalName == name)?.Value;
