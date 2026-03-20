@@ -4,7 +4,7 @@ using Markout.Formatting;
 
 static class ListCommand
 {
-    public static int Run(string installDir, bool noHeader = false)
+    public static int Run(string installDir, bool noHeader = false, string? columns = null)
     {
         if (!Directory.Exists(installDir))
         {
@@ -29,7 +29,15 @@ static class ListCommand
             Tools = entries.Select(e => new ToolRow(e.Name, GetToolType(e, installDir))).ToList()
         };
 
-        MarkoutSerializer.Serialize(view, Console.Out, new OneLineFormatter(showHeader: !noHeader), ToolListViewContext.Default);
+        var writerOptions = new MarkoutWriterOptions();
+
+        if (columns is not null)
+        {
+            var cols = columns.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            writerOptions.Projection = MarkoutProjection.WithColumns(cols);
+        }
+
+        MarkoutSerializer.Serialize(view, Console.Out, new OneLineFormatter(showHeader: !noHeader), ToolListViewContext.Default, writerOptions);
 
         return 0;
     }

@@ -79,13 +79,17 @@ static class CommandLineBuilder
         });
 
         var listNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
+        var listColumnsOption = new Option<string?>("--columns") { Description = "Select columns (comma-separated)" };
+        listColumnsOption.Aliases.Add("-S");
         var listCommand = new Command("list", "List installed tools");
         listCommand.Aliases.Add("ls");
         listCommand.Options.Add(listNoHeaderOption);
+        listCommand.Options.Add(listColumnsOption);
         listCommand.SetAction((parseResult, ct) =>
         {
             bool noHeader = parseResult.GetValue(listNoHeaderOption);
-            ListCommand.Run(Installer.DefaultInstallDir, noHeader);
+            string? columns = parseResult.GetValue(listColumnsOption);
+            ListCommand.Run(Installer.DefaultInstallDir, noHeader, columns);
             return Task.FromResult(0);
         });
 
