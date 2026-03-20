@@ -60,18 +60,25 @@ static unsafe class HostDispatch
             var compat = RuntimeCompat.CheckCompatibility(runtimeConfig);
             if (!compat.CanRun)
             {
-                Console.Error.WriteLine($"error: {toolName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
-                Console.Error.WriteLine();
-
-                if (compat.RollForwardWouldHelp && !manifest.RollForward)
+                if (manifest.RollForward && compat.RollForwardWouldHelp)
                 {
-                    Console.Error.WriteLine("A compatible runtime is available with roll-forward. Reinstall with:");
-                    Console.Error.WriteLine($"  dotnet install --package {toolName} --allow-roll-forward");
-                    Console.Error.WriteLine();
+                    // Roll-forward is enabled and a compatible runtime exists — proceed
                 }
+                else
+                {
+                    Console.Error.WriteLine($"error: {toolName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
+                    Console.Error.WriteLine();
 
-                Console.Error.WriteLine($"Or install .NET {compat.RequiredVersion}: https://dot.net/download");
-                return 1;
+                    if (compat.RollForwardWouldHelp && !manifest.RollForward)
+                    {
+                        Console.Error.WriteLine("A compatible runtime is available with roll-forward. Reinstall with:");
+                        Console.Error.WriteLine($"  dotnet install --package {toolName} --allow-roll-forward");
+                        Console.Error.WriteLine();
+                    }
+
+                    Console.Error.WriteLine($"Or install .NET {compat.RequiredVersion}: https://dot.net/download");
+                    return 1;
+                }
             }
         }
 
@@ -81,11 +88,15 @@ static unsafe class HostDispatch
 
         if (manifest.RollForward)
         {
+            execArgs.Add("exec");
             execArgs.Add("--roll-forward");
-            execArgs.Add("Major");
+            execArgs.Add("LatestMajor");
+        }
+        else
+        {
+            execArgs.Add("exec");
         }
 
-        execArgs.Add("exec");
         execArgs.Add(entryDll);
         execArgs.AddRange(args);
 
