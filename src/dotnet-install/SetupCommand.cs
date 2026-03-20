@@ -203,20 +203,30 @@ static class SetupCommand
 
     static bool ConfigureWindowsPath(string installDir)
     {
+        // Check if DOTNET_INSTALL_HOME is already set
+        string? existingHome = Environment.GetEnvironmentVariable(ShellConfig.EnvVar, EnvironmentVariableTarget.User);
+        bool homeSet = existingHome is not null &&
+            string.Equals(Path.GetFullPath(existingHome.TrimEnd(Path.DirectorySeparatorChar)),
+                          installDir.TrimEnd(Path.DirectorySeparatorChar),
+                          StringComparison.OrdinalIgnoreCase);
+
         string currentPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "";
 
-        if (currentPath.Split(';', StringSplitOptions.RemoveEmptyEntries)
+        bool pathSet = currentPath.Split(';', StringSplitOptions.RemoveEmptyEntries)
             .Any(p => string.Equals(Path.GetFullPath(p.TrimEnd(Path.DirectorySeparatorChar)),
                                      installDir.TrimEnd(Path.DirectorySeparatorChar),
-                                     StringComparison.OrdinalIgnoreCase)))
+                                     StringComparison.OrdinalIgnoreCase));
+
+        if (homeSet && pathSet)
         {
+            Console.WriteLine($"✔ {ShellConfig.EnvVar} is set");
             Console.WriteLine($"✔ {DisplayPath(installDir)} is in user PATH");
             return false;
         }
 
         if (!Console.IsInputRedirected)
         {
-            Console.Write($"Add {DisplayPath(installDir)} to user PATH? [Y/n] ");
+            Console.Write($"Configure {ShellConfig.EnvVar} and PATH? [Y/n] ");
             var key = Console.ReadKey(intercept: true);
             Console.WriteLine();
 
@@ -227,14 +237,22 @@ static class SetupCommand
             }
         }
 
-        string newPath = string.IsNullOrEmpty(currentPath)
-            ? installDir
-            : $"{installDir};{currentPath}";
+        if (!homeSet)
+        {
+            Environment.SetEnvironmentVariable(ShellConfig.EnvVar, installDir, EnvironmentVariableTarget.User);
+            Console.WriteLine($"✔ Set {ShellConfig.EnvVar}={DisplayPath(installDir)}");
+        }
 
-        Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
-        Console.WriteLine($"✔ Added {DisplayPath(installDir)} to user PATH");
+        if (!pathSet)
+        {
+            string newPath = string.IsNullOrEmpty(currentPath)
+                ? installDir
+                : $"{installDir};{currentPath}";
+            Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
+            Console.WriteLine($"✔ Added {DisplayPath(installDir)} to user PATH");
+        }
+
         Console.WriteLine($"  Restart your terminal to pick up the change.");
-
         return true;
     }
 

@@ -1,8 +1,10 @@
 /// <summary>
 /// Shell configuration detection — shared by ShellHint (print-only) and SetupCommand (write).
 /// </summary>
-record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, string ExportLine, string DisplayDir)
+record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, string ExportLine, string EnvLine, string DisplayDir)
 {
+    public const string EnvVar = "DOTNET_INSTALL_HOME";
+
     public static bool IsOnPath(string dir)
     {
         var pathDirs = Environment.GetEnvironmentVariable("PATH")?
@@ -30,7 +32,14 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
         string pathEntry = installDir.StartsWith(home + "/")
             ? $"$HOME/{Path.GetRelativePath(home, installDir)}"
             : installDir;
-        string exportLine = $"""export PATH="{pathEntry}:$PATH" """.Trim();
+
+        string envLine = shellName == "fish"
+            ? $"set -gx {EnvVar} \"{pathEntry}\""
+            : $"export {EnvVar}=\"{pathEntry}\"";
+
+        string exportLine = shellName == "fish"
+            ? $"fish_add_path ${EnvVar}"
+            : $"""export PATH="${EnvVar}:$PATH" """.Trim();
 
         string? rcFile = shellName switch
         {
@@ -42,15 +51,13 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
 
         string? rcFileAbsolute = rcFile?.Replace("~", home);
 
-        return new ShellConfig(shellName, rcFile, rcFileAbsolute, exportLine, displayDir);
+        return new ShellConfig(shellName, rcFile, rcFileAbsolute, exportLine, envLine, displayDir);
     }
 
     /// <summary>
-    /// The line to append to the rc file (shell-specific syntax).
+    /// The lines to append to the rc file (shell-specific syntax).
     /// </summary>
-    public string RcLine => ShellName == "fish"
-        ? $"fish_add_path {DisplayDir}"
-        : ExportLine;
+    public string RcLine => $"{EnvLine}\n{ExportLine}";
 
     /// <summary>
     /// Check if the rc file already contains the PATH configuration.
@@ -61,15 +68,13 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
             return false;
 
         string content = File.ReadAllText(RcFileAbsolute);
-        // Check for the exact export line or the key path segment
-        return content.Contains(DisplayDir.Replace("~", "$HOME")) ||
+        return content.Contains(EnvVar) ||
+               content.Contains(DisplayDir.Replace("~", "$HOME")) ||
                content.Contains(DisplayDir);
     }
 
     static string GetBashRcFile()
     {
-        // On macOS, bash reads ~/.bash_profile for login shells (default Terminal behavior)
-        // On Linux, bash reads ~/.bashrc for interactive non-login shells
         if (OperatingSystem.IsMacOS())
             return "~/.bash_profile";
 
@@ -109,18 +114,15 @@ static class ShellHint
     {
         if (config.RcFile is not null)
         {
-            Console.WriteLine($"Add it with:");
+            Console.WriteLine($"Run setup to configure your shell:");
             Console.WriteLine();
-
-            if (config.ShellName == "fish")
-                Console.WriteLine($"  echo '{config.RcLine}' >> {config.RcFile} && {config.RcLine}");
-            else
-                Console.WriteLine($"  echo '{config.RcLine}' >> {config.RcFile} && source {config.RcFile}");
+            Console.WriteLine($"  dotnet-install setup");
         }
         else
         {
-            Console.WriteLine($"Add it to your shell config:");
+            Console.WriteLine($"Add to your shell config:");
             Console.WriteLine();
+            Console.WriteLine($"  {config.EnvLine}");
             Console.WriteLine($"  {config.ExportLine}");
         }
 
@@ -129,9 +131,9 @@ static class ShellHint
 
     static void PrintWindowsHint(string displayDir, string absoluteDir)
     {
-        Console.WriteLine($"Add it with:");
+        Console.WriteLine($"Run setup to configure your PATH:");
         Console.WriteLine();
-        Console.WriteLine($"""  [Environment]::SetEnvironmentVariable("PATH", "{absoluteDir};" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")""");
+        Console.WriteLine($"  dotnet-install setup");
         Console.WriteLine();
     }
 }

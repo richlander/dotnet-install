@@ -239,6 +239,13 @@ static class CommandLineBuilder
             return Task.FromResult(CompletionCommand.Run(parseResult.GetValue(completionShellArg)!));
         });
 
+        var envCommand = new Command("env", "Print environment information");
+        envCommand.SetAction((parseResult, ct) =>
+        {
+            EnvCommand.Run(Installer.DefaultInstallDir);
+            return Task.FromResult(0);
+        });
+
         rootCommand.Subcommands.Add(setupCommand);
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(updateCommand);
@@ -249,6 +256,7 @@ static class CommandLineBuilder
         rootCommand.Subcommands.Add(outdatedCommand);
         rootCommand.Subcommands.Add(runCommand);
         rootCommand.Subcommands.Add(completionCommand);
+        rootCommand.Subcommands.Add(envCommand);
 
         // --- Default install action ---
 
