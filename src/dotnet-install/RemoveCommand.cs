@@ -20,7 +20,7 @@ static class RemoveCommand
 
             if (entryPath is null)
             {
-                Console.Error.WriteLine($"  Not found: {name}");
+                Console.Error.WriteLine($"Not found: {name}");
                 exitCode = 1;
                 continue;
             }
@@ -36,9 +36,9 @@ static class RemoveCommand
             File.Delete(entryPath);
 
             if (target is not null)
-                Console.WriteLine($"  Removed: {name} (was -> {target})");
+                Console.WriteLine($"Removed: {name} (was -> {target})");
             else
-                Console.WriteLine($"  Removed: {name}");
+                Console.WriteLine($"Removed: {name}");
         }
 
         return exitCode;

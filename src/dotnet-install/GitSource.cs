@@ -19,7 +19,7 @@ static class GitSource
         int slashIndex = ownerRepo.IndexOf('/');
         if (slashIndex < 0)
         {
-            Console.Error.WriteLine("  error: expected format owner/repo[@ref]");
+            Console.Error.WriteLine("error: expected format owner/repo[@ref]");
             return 1;
         }
 
@@ -28,7 +28,7 @@ static class GitSource
 
         if (string.IsNullOrEmpty(owner) || string.IsNullOrEmpty(repo))
         {
-            Console.Error.WriteLine("  error: owner and repo must not be empty");
+            Console.Error.WriteLine("error: owner and repo must not be empty");
             return 1;
         }
 
@@ -46,13 +46,13 @@ static class GitSource
 
         if (isExistingClone)
         {
-            Console.WriteLine($"  Fetching {owner}/{repo}...");
+            Console.WriteLine($"Fetching {owner}/{repo}...");
             if (Run("git", ["-C", repoDir, "fetch", "origin"]) != 0)
                 return 1;
         }
         else
         {
-            Console.WriteLine($"  Cloning {owner}/{repo}...");
+            Console.WriteLine($"Cloning {owner}/{repo}...");
             if (Run("git", ["clone", cloneUrl, repoDir]) != 0)
                 return 1;
         }
@@ -60,12 +60,12 @@ static class GitSource
         // Checkout ref
         if (gitRef is not null)
         {
-            Console.WriteLine($"  Checking out {gitRef}...");
+            Console.WriteLine($"Checking out {gitRef}...");
             if (Run("git", ["-C", repoDir, "checkout", gitRef]) != 0)
             {
                 if (Run("git", ["-C", repoDir, "checkout", "--detach", $"origin/{gitRef}"]) != 0)
                 {
-                    Console.Error.WriteLine($"  error: could not resolve ref '{gitRef}'");
+                    Console.Error.WriteLine($"error: could not resolve ref '{gitRef}'");
                     return 1;
                 }
             }
@@ -112,7 +112,7 @@ static class GitSource
             string full = Path.GetFullPath(Path.Combine(repoDir, projectOverride));
             if (!File.Exists(full))
             {
-                Console.Error.WriteLine($"  error: project not found: {projectOverride}");
+                Console.Error.WriteLine($"error: project not found: {projectOverride}");
                 return null;
             }
             return full;
@@ -130,13 +130,13 @@ static class GitSource
                     string full = Path.GetFullPath(Path.Combine(repoDir, config.Project));
                     if (File.Exists(full))
                         return full;
-                    Console.Error.WriteLine($"  error: project from .dotnet-install.json not found: {config.Project}");
+                    Console.Error.WriteLine($"error: project from .dotnet-install.json not found: {config.Project}");
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"  error: reading .dotnet-install.json: {ex.Message}");
+                Console.Error.WriteLine($"error: reading .dotnet-install.json: {ex.Message}");
                 return null;
             }
         }
@@ -178,13 +178,13 @@ static class GitSource
 
         if (exeProjects.Count == 0)
         {
-            Console.Error.WriteLine("  error: no executable projects found in repository");
+            Console.Error.WriteLine("error: no executable projects found in repository");
             return null;
         }
 
-        Console.Error.WriteLine("  error: multiple executable projects found. Use --project to specify:");
+        Console.Error.WriteLine("error: multiple executable projects found. Use --project to specify:");
         foreach (string p in exeProjects)
-            Console.Error.WriteLine($"    {Path.GetRelativePath(repoDir, p)}");
+            Console.Error.WriteLine($"  {Path.GetRelativePath(repoDir, p)}");
         return null;
     }
 

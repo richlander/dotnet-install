@@ -65,12 +65,12 @@ static unsafe class HostDispatch
 
                 if (compat.RollForwardWouldHelp && !manifest.RollForward)
                 {
-                    Console.Error.WriteLine("  A compatible runtime is available with roll-forward. Reinstall with:");
-                    Console.Error.WriteLine($"    dotnet install --package {toolName} --allow-roll-forward");
+                    Console.Error.WriteLine("A compatible runtime is available with roll-forward. Reinstall with:");
+                    Console.Error.WriteLine($"  dotnet install --package {toolName} --allow-roll-forward");
                     Console.Error.WriteLine();
                 }
 
-                Console.Error.WriteLine($"  Or install .NET {compat.RequiredVersion}: https://dot.net/download");
+                Console.Error.WriteLine($"Or install .NET {compat.RequiredVersion}: https://dot.net/download");
                 return 1;
             }
         }
@@ -149,7 +149,7 @@ static unsafe class HostDispatch
                 // execvp only returns on error
                 int errno = Marshal.GetLastPInvokeError();
                 Console.Error.WriteLine($"error: failed to exec dotnet (errno {errno})");
-                Console.Error.WriteLine("  Is .NET installed? https://dot.net/download");
+                Console.Error.WriteLine("Is .NET installed? https://dot.net/download");
                 return 1;
             }
             finally
@@ -177,7 +177,7 @@ static unsafe class HostDispatch
         if (process is null)
         {
             Console.Error.WriteLine("error: failed to start dotnet");
-            Console.Error.WriteLine("  Is .NET installed? https://dot.net/download");
+            Console.Error.WriteLine("Is .NET installed? https://dot.net/download");
             return 1;
         }
 

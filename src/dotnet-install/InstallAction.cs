@@ -50,19 +50,19 @@ static class InstallAction
 
                 if (!Console.IsInputRedirected)
                 {
-                    Console.Write($"  '{projectArg}' is not a local path. Clone from {url}? [Y/n] ");
+                    Console.Write($"'{projectArg}' is not a local path. Clone from {url}? [Y/n] ");
                     var key = Console.ReadKey(intercept: true);
                     Console.WriteLine();
 
                     if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
                     {
-                        Console.WriteLine("  Cancelled.");
+                        Console.WriteLine("Cancelled.");
                         return 1;
                     }
                 }
                 else
                 {
-                    Console.Error.WriteLine($"  '{projectArg}' is not a local path. Use --github to install from GitHub in non-interactive mode.");
+                    Console.Error.WriteLine($"'{projectArg}' is not a local path. Use --github to install from GitHub in non-interactive mode.");
                     return 1;
                 }
 
@@ -73,19 +73,19 @@ static class InstallAction
                 // Bare name — prompt before installing from NuGet
                 if (!Console.IsInputRedirected)
                 {
-                    Console.Write($"  '{projectArg}' is not a local path. Install from NuGet? [Y/n] ");
+                    Console.Write($"'{projectArg}' is not a local path. Install from NuGet? [Y/n] ");
                     var key = Console.ReadKey(intercept: true);
                     Console.WriteLine();
 
                     if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
                     {
-                        Console.WriteLine("  Cancelled.");
+                        Console.WriteLine("Cancelled.");
                         return 1;
                     }
                 }
                 else
                 {
-                    Console.Error.WriteLine($"  '{projectArg}' is not a local path. Use --package to install from NuGet in non-interactive mode.");
+                    Console.Error.WriteLine($"'{projectArg}' is not a local path. Use --package to install from NuGet in non-interactive mode.");
                     return 1;
                 }
 

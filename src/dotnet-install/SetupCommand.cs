@@ -10,7 +10,7 @@ static class SetupCommand
         Directory.CreateDirectory(installDir);
 
         Console.WriteLine();
-        Console.WriteLine("  Setting up dotnet-install...");
+        Console.WriteLine("Setting up dotnet-install...");
         Console.WriteLine();
 
         bool didSomething = false;
@@ -23,7 +23,7 @@ static class SetupCommand
 
         if (!didSomething)
         {
-            Console.WriteLine("  ✔ Already set up — nothing to do.");
+            Console.WriteLine("✔ Already set up — nothing to do.");
         }
 
         Console.WriteLine();
@@ -39,7 +39,7 @@ static class SetupCommand
         string? processPath = Environment.ProcessPath;
         if (processPath is null)
         {
-            Console.Error.WriteLine("  warning: could not determine process path — skipping self-link.");
+            Console.Error.WriteLine("warning: could not determine process path — skipping self-link.");
             return false;
         }
 
@@ -51,7 +51,7 @@ static class SetupCommand
         string processDir = Path.GetDirectoryName(processPath)!;
         if (string.Equals(Path.GetFullPath(processDir), installDir, StringComparison.Ordinal))
         {
-            Console.WriteLine($"  ✔ dotnet-install is in {DisplayPath(installDir)}");
+            Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
             return false;
         }
 
@@ -62,7 +62,7 @@ static class SetupCommand
             if (info.LinkTarget is not null &&
                 string.Equals(Path.GetFullPath(info.LinkTarget), processPath, StringComparison.Ordinal))
             {
-                Console.WriteLine($"  ✔ {DisplayPath(targetPath)} → {DisplayPath(processPath)}");
+                Console.WriteLine($"✔ {DisplayPath(targetPath)} → {DisplayPath(processPath)}");
                 return false;
             }
 
@@ -74,12 +74,12 @@ static class SetupCommand
         {
             // Windows: copy the binary (symlinks require elevated privileges)
             File.Copy(processPath, targetPath, overwrite: true);
-            Console.WriteLine($"  ✔ Copied dotnet-install to {DisplayPath(installDir)}");
+            Console.WriteLine($"✔ Copied dotnet-install to {DisplayPath(installDir)}");
         }
         else
         {
             File.CreateSymbolicLink(targetPath, processPath);
-            Console.WriteLine($"  ✔ {DisplayPath(targetPath)} → {DisplayPath(processPath)}");
+            Console.WriteLine($"✔ {DisplayPath(targetPath)} → {DisplayPath(processPath)}");
         }
 
         return true;
@@ -92,7 +92,7 @@ static class SetupCommand
     {
         if (ShellConfig.IsOnPath(installDir))
         {
-            Console.WriteLine($"  ✔ {DisplayPath(installDir)} is on PATH");
+            Console.WriteLine($"✔ {DisplayPath(installDir)} is on PATH");
             return false;
         }
 
@@ -105,10 +105,10 @@ static class SetupCommand
 
         if (config.RcFile is null)
         {
-            Console.WriteLine($"  ⚠ {config.DisplayDir} is not in your PATH.");
-            Console.WriteLine($"  Add it to your shell config:");
+            Console.WriteLine($"⚠ {config.DisplayDir} is not in your PATH.");
+            Console.WriteLine($"Add it to your shell config:");
             Console.WriteLine();
-            Console.WriteLine($"    {config.ExportLine}");
+            Console.WriteLine($"  {config.ExportLine}");
             Console.WriteLine();
             return false;
         }
@@ -116,8 +116,8 @@ static class SetupCommand
         // Check if the rc file already has the PATH entry
         if (config.RcFileContainsPath())
         {
-            Console.WriteLine($"  ✔ {config.RcFile} already configures PATH");
-            Console.WriteLine($"    Restart your shell or run: source {config.RcFile}");
+            Console.WriteLine($"✔ {config.RcFile} already configures PATH");
+            Console.WriteLine($"  Restart your shell or run: source {config.RcFile}");
             return false;
         }
 
@@ -128,15 +128,15 @@ static class SetupCommand
             return WritePathToRcFile(config);
         }
 
-        Console.Write($"  Add {config.DisplayDir} to PATH in {config.RcFile}? [Y/n] ");
+        Console.Write($"Add {config.DisplayDir} to PATH in {config.RcFile}? [Y/n] ");
         var key = Console.ReadKey(intercept: true);
         Console.WriteLine();
 
         if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
         {
-            Console.WriteLine($"  Skipped. Add it manually:");
+            Console.WriteLine($"Skipped. Add it manually:");
             Console.WriteLine();
-            Console.WriteLine($"    echo '{config.RcLine}' >> {config.RcFile}");
+            Console.WriteLine($"  echo '{config.RcLine}' >> {config.RcFile}");
             Console.WriteLine();
             return false;
         }
@@ -159,9 +159,9 @@ static class SetupCommand
         string comment = $"\n# Added by dotnet-install setup";
         File.AppendAllText(rcPath, $"{separator}{comment}\n{config.RcLine}\n");
 
-        Console.WriteLine($"  ✔ Added PATH to {config.RcFile}");
+        Console.WriteLine($"✔ Added PATH to {config.RcFile}");
         Console.WriteLine();
-        Console.WriteLine($"    Restart your shell or run: source {config.RcFile}");
+        Console.WriteLine($"  Restart your shell or run: source {config.RcFile}");
 
         return true;
     }
@@ -175,19 +175,19 @@ static class SetupCommand
                                      installDir.TrimEnd(Path.DirectorySeparatorChar),
                                      StringComparison.OrdinalIgnoreCase)))
         {
-            Console.WriteLine($"  ✔ {DisplayPath(installDir)} is in user PATH");
+            Console.WriteLine($"✔ {DisplayPath(installDir)} is in user PATH");
             return false;
         }
 
         if (!Console.IsInputRedirected)
         {
-            Console.Write($"  Add {DisplayPath(installDir)} to user PATH? [Y/n] ");
+            Console.Write($"Add {DisplayPath(installDir)} to user PATH? [Y/n] ");
             var key = Console.ReadKey(intercept: true);
             Console.WriteLine();
 
             if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
             {
-                Console.WriteLine($"  Skipped.");
+                Console.WriteLine($"Skipped.");
                 return false;
             }
         }
@@ -197,8 +197,8 @@ static class SetupCommand
             : $"{installDir};{currentPath}";
 
         Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
-        Console.WriteLine($"  ✔ Added {DisplayPath(installDir)} to user PATH");
-        Console.WriteLine($"    Restart your terminal to pick up the change.");
+        Console.WriteLine($"✔ Added {DisplayPath(installDir)} to user PATH");
+        Console.WriteLine($"  Restart your terminal to pick up the change.");
 
         return true;
     }

@@ -18,7 +18,7 @@ static class Installer
 
         if (!IsExecutable(info.OutputType))
         {
-            Console.Error.WriteLine($"  error: not an executable project (OutputType={info.OutputType})");
+            Console.Error.WriteLine($"error: not an executable project (OutputType={info.OutputType})");
             return 1;
         }
 
@@ -30,8 +30,8 @@ static class Installer
         if (info.TargetFramework is not null)
             CheckSdkCompatibility(info.TargetFramework);
 
-        Console.WriteLine($"  Installing {appName} to {installDir}");
-        Console.WriteLine($"  Publishing ({mode}, Release)...");
+        Console.WriteLine($"Installing {appName} to {installDir}");
+        Console.WriteLine($"Publishing ({mode}, Release)...");
 
         // 2. Execute the Publish target via MSBuild API
         string tempDir = Path.Combine(Path.GetTempPath(), $"dotnet-install-{Path.GetRandomFileName()}");
@@ -40,14 +40,14 @@ static class Installer
         {
             if (!Publish(projectFile, tempDir))
             {
-                Console.Error.WriteLine("  error: publish failed");
+                Console.Error.WriteLine("error: publish failed");
                 return 1;
             }
 
             // 3. SourceLink verification (before placement)
             if (requireSourceLink && !SourceLinkCheck.Verify(tempDir))
             {
-                Console.Error.WriteLine("  error: --require-sourcelink specified but SourceLink verification failed");
+                Console.Error.WriteLine("error: --require-sourcelink specified but SourceLink verification failed");
                 return 1;
             }
 
@@ -57,7 +57,7 @@ static class Installer
 
             if (!File.Exists(execPath))
             {
-                Console.Error.WriteLine($"  error: '{execName}' not found in publish output");
+                Console.Error.WriteLine($"error: '{execName}' not found in publish output");
                 return 1;
             }
 
@@ -84,7 +84,7 @@ static class Installer
 
             string display = singleFile ? execName :
                              OperatingSystem.IsWindows() ? $"{appName}.cmd" : execName;
-            Console.WriteLine($"  Installed {appName} → {Path.Combine(installDir, display)}");
+            Console.WriteLine($"Installed {appName} → {Path.Combine(installDir, display)}");
 
             return 0;
         }
@@ -107,15 +107,15 @@ static class Installer
         var parsed = PackageExtractor.ParsePackageReference(packageSpec);
         if (parsed is null)
         {
-            Console.Error.WriteLine($"  error: invalid package reference '{packageSpec}'");
+            Console.Error.WriteLine($"error: invalid package reference '{packageSpec}'");
             return 1;
         }
 
         string packageName = parsed.Id;
         string? version = string.IsNullOrEmpty(parsed.Version) ? null : parsed.Version;
 
-        Console.WriteLine($"  Installing {packageName}{(version is not null ? $" ({version})" : "")} to {installDir}");
-        Console.WriteLine("  Downloading...");
+        Console.WriteLine($"Installing {packageName}{(version is not null ? $" ({version})" : "")} to {installDir}");
+        Console.WriteLine("Downloading...");
 
         using var client = new HttpClient();
         var nuget = new NuGetClient(client);
@@ -127,7 +127,7 @@ static class Installer
             version = await nuget.GetLatestVersionAsync(packageName);
             if (version is null)
             {
-                Console.Error.WriteLine($"  error: package '{packageName}' not found");
+                Console.Error.WriteLine($"error: package '{packageName}' not found");
                 return 1;
             }
         }
@@ -138,7 +138,7 @@ static class Installer
 
         if (cachedPath is not null)
         {
-            Console.WriteLine($"  Using cached {packageName} {version}");
+            Console.WriteLine($"Using cached {packageName} {version}");
             extractPath = cachedPath;
         }
         else
@@ -169,7 +169,7 @@ static class Installer
             }
             catch (HttpRequestException ex)
             {
-                Console.Error.WriteLine($"  error: failed to download {packageName}@{version}: {ex.Message}");
+                Console.Error.WriteLine($"error: failed to download {packageName}@{version}: {ex.Message}");
                 return 1;
             }
         }
@@ -185,10 +185,10 @@ static class Installer
                     PrintSignature(sigResult);
                     break;
                 case SignatureStatus.Unsigned:
-                    Console.Error.WriteLine("  warning: package is not signed");
+                    Console.Error.WriteLine("warning: package is not signed");
                     break;
                 case SignatureStatus.Invalid:
-                    Console.Error.WriteLine($"  error: package signature verification failed: {sigResult.Reason}");
+                    Console.Error.WriteLine($"error: package signature verification failed: {sigResult.Reason}");
                     return 1;
             }
         }
@@ -208,7 +208,7 @@ static class Installer
 
             if (toolInfo is null)
             {
-                Console.Error.WriteLine("  error: package does not contain a .NET tool (no DotnetToolSettings.xml)");
+                Console.Error.WriteLine("error: package does not contain a .NET tool (no DotnetToolSettings.xml)");
                 return 1;
             }
 
@@ -218,7 +218,7 @@ static class Installer
             // SourceLink verification (before placement)
             if (requireSourceLink && !SourceLinkCheck.Verify(toolDir))
             {
-                Console.Error.WriteLine("  error: --require-sourcelink specified but SourceLink verification failed");
+                Console.Error.WriteLine("error: --require-sourcelink specified but SourceLink verification failed");
                 return 1;
             }
 
@@ -274,20 +274,20 @@ static class Installer
                         {
                             if (compat.RollForwardWouldHelp && !allowRollForward)
                             {
-                                Console.Error.WriteLine($"  error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
+                                Console.Error.WriteLine($"error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
                                 Console.Error.WriteLine();
-                                Console.Error.WriteLine("  This can be resolved by:");
-                                Console.Error.WriteLine($"    dotnet install --package {packageSpec} --allow-roll-forward");
-                                Console.Error.WriteLine($"    Install .NET {compat.RequiredVersion}: https://dot.net/download");
+                                Console.Error.WriteLine("This can be resolved by:");
+                                Console.Error.WriteLine($"  dotnet install --package {packageSpec} --allow-roll-forward");
+                                Console.Error.WriteLine($"  Install .NET {compat.RequiredVersion}: https://dot.net/download");
                                 return 1;
                             }
 
                             if (!compat.RollForwardWouldHelp)
                             {
-                                Console.Error.WriteLine($"  error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
+                                Console.Error.WriteLine($"error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
                                 Console.Error.WriteLine();
-                                Console.Error.WriteLine("  To resolve this:");
-                                Console.Error.WriteLine($"    Install .NET {compat.RequiredVersion}: https://dot.net/download");
+                                Console.Error.WriteLine("To resolve this:");
+                                Console.Error.WriteLine($"  Install .NET {compat.RequiredVersion}: https://dot.net/download");
                                 return 1;
                             }
 
@@ -313,7 +313,7 @@ static class Installer
             }
 
             string versionDisplay = version is not null ? $" ({version})" : "";
-            Console.WriteLine($"  Installed {commandName}{versionDisplay} → {Path.Combine(installDir, commandName)}");
+            Console.WriteLine($"Installed {commandName}{versionDisplay} → {Path.Combine(installDir, commandName)}");
             return 0;
         }
         finally
@@ -566,8 +566,8 @@ static class Installer
 
         if (highestRuntime is not null && tfmVersion.Major > highestRuntime.Major)
         {
-            Console.Error.WriteLine($"  warning: project targets {tfm} but the highest installed runtime is {highestRuntime.Major}.{highestRuntime.Minor}");
-            Console.Error.WriteLine($"  The build will likely fail. Install .NET {tfmVersion}: https://dot.net/download");
+            Console.Error.WriteLine($"warning: project targets {tfm} but the highest installed runtime is {highestRuntime.Major}.{highestRuntime.Minor}");
+            Console.Error.WriteLine($"The build will likely fail. Install .NET {tfmVersion}: https://dot.net/download");
         }
     }
 
@@ -703,12 +703,12 @@ static class Installer
     {
         if (sigResult.SignatureType == SignatureType.Author && sigResult.CounterSignature is { IsValid: true })
         {
-            Console.WriteLine($"  Verified: {sigResult.CounterSignature.Publisher ?? "signed"} ({sigResult.CounterSignature.SignatureType})");
-            Console.WriteLine($"  Author: {sigResult.Publisher}");
+            Console.WriteLine($"Verified: {sigResult.CounterSignature.Publisher ?? "signed"} ({sigResult.CounterSignature.SignatureType})");
+            Console.WriteLine($"Author: {sigResult.Publisher}");
         }
         else
         {
-            Console.WriteLine($"  Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
+            Console.WriteLine($"Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
         }
     }
 

@@ -93,7 +93,7 @@ static class ShellHint
         var config = ShellConfig.Detect(installDir);
 
         Console.WriteLine();
-        Console.WriteLine($"  ⚠ {config.DisplayDir} is not in your PATH.");
+        Console.WriteLine($"⚠ {config.DisplayDir} is not in your PATH.");
 
         if (OperatingSystem.IsWindows())
         {
@@ -109,19 +109,19 @@ static class ShellHint
     {
         if (config.RcFile is not null)
         {
-            Console.WriteLine($"  Add it with:");
+            Console.WriteLine($"Add it with:");
             Console.WriteLine();
 
             if (config.ShellName == "fish")
-                Console.WriteLine($"    echo '{config.RcLine}' >> {config.RcFile} && {config.RcLine}");
+                Console.WriteLine($"  echo '{config.RcLine}' >> {config.RcFile} && {config.RcLine}");
             else
-                Console.WriteLine($"    echo '{config.RcLine}' >> {config.RcFile} && source {config.RcFile}");
+                Console.WriteLine($"  echo '{config.RcLine}' >> {config.RcFile} && source {config.RcFile}");
         }
         else
         {
-            Console.WriteLine($"  Add it to your shell config:");
+            Console.WriteLine($"Add it to your shell config:");
             Console.WriteLine();
-            Console.WriteLine($"    {config.ExportLine}");
+            Console.WriteLine($"  {config.ExportLine}");
         }
 
         Console.WriteLine();
@@ -129,9 +129,9 @@ static class ShellHint
 
     static void PrintWindowsHint(string displayDir, string absoluteDir)
     {
-        Console.WriteLine($"  Add it with:");
+        Console.WriteLine($"Add it with:");
         Console.WriteLine();
-        Console.WriteLine($"""    [Environment]::SetEnvironmentVariable("PATH", "{absoluteDir};" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")""");
+        Console.WriteLine($"""  [Environment]::SetEnvironmentVariable("PATH", "{absoluteDir};" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")""");
         Console.WriteLine();
     }
 }

@@ -28,7 +28,7 @@ static class UpdateCommand
             tools = tools.Where(t => toolNames.Contains(t.Name, StringComparer.OrdinalIgnoreCase)).ToList();
             var missing = toolNames.Where(n => !tools.Any(t => t.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToList();
             foreach (string name in missing)
-                Console.Error.WriteLine($"  {name}: not found or no update metadata");
+                Console.Error.WriteLine($"{name}: not found or no update metadata");
         }
 
         if (tools.Count == 0)
@@ -61,7 +61,7 @@ static class UpdateCommand
                     break;
 
                 default:
-                    Console.Error.WriteLine($"  {tool.Name}: unknown source type '{source.Type}'");
+                    Console.Error.WriteLine($"{tool.Name}: unknown source type '{source.Type}'");
                     failures++;
                     break;
             }
@@ -78,7 +78,7 @@ static class UpdateCommand
         string packageName = source.Package!;
         string installedVersion = source.Version!;
 
-        Console.Write($"  {tool.Name} ({packageName} {installedVersion})... ");
+        Console.Write($"{tool.Name} ({packageName} {installedVersion})... ");
 
         using var client = new HttpClient();
         var nuget = new NuGetClient(client);
@@ -112,7 +112,7 @@ static class UpdateCommand
         string shortCommit = installedCommit is not null && installedCommit.Length >= 7
             ? installedCommit[..7] : installedCommit ?? "unknown";
 
-        Console.Write($"  {tool.Name} ({repository} {shortCommit})... ");
+        Console.Write($"{tool.Name} ({repository} {shortCommit})... ");
 
         // Resolve cache paths
         int slashIndex = repository.IndexOf('/');
@@ -177,7 +177,7 @@ static class UpdateCommand
         string shortCommit = installedCommit is not null && installedCommit.Length >= 7
             ? installedCommit[..7] : installedCommit ?? "unknown";
 
-        Console.Write($"  {tool.Name} (local {shortCommit})... ");
+        Console.Write($"{tool.Name} (local {shortCommit})... ");
 
         if (!File.Exists(projectPath))
         {
