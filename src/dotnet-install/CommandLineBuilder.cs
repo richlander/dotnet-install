@@ -78,17 +78,14 @@ static class CommandLineBuilder
             return Task.FromResult(0);
         });
 
-        var listOneLineOption = new Option<bool>("--oneline") { Description = "One tool per line, columnar output" };
         var listNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
         var listCommand = new Command("list", "List installed tools");
         listCommand.Aliases.Add("ls");
-        listCommand.Options.Add(listOneLineOption);
         listCommand.Options.Add(listNoHeaderOption);
         listCommand.SetAction((parseResult, ct) =>
         {
-            bool oneLine = parseResult.GetValue(listOneLineOption);
             bool noHeader = parseResult.GetValue(listNoHeaderOption);
-            ListCommand.Run(Installer.DefaultInstallDir, oneLine, noHeader);
+            ListCommand.Run(Installer.DefaultInstallDir, noHeader);
             return Task.FromResult(0);
         });
 

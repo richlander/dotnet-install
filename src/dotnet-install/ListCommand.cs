@@ -4,7 +4,7 @@ using Markout.Formatting;
 
 static class ListCommand
 {
-    public static int Run(string installDir, bool oneLine = false, bool noHeader = false)
+    public static int Run(string installDir, bool noHeader = false)
     {
         if (!Directory.Exists(installDir))
         {
@@ -26,16 +26,34 @@ static class ListCommand
 
         var view = new ToolListView
         {
-            Tools = entries.Select(e => new ToolRow(e.Name, e.LinkTarget)).ToList()
+            Tools = entries.Select(e => new ToolRow(e.Name, GetToolType(e, installDir))).ToList()
         };
 
-        IMarkoutFormatter formatter = oneLine
-            ? new OneLineFormatter(showHeader: !noHeader)
-            : new PlainTextFormatter();
-
-        MarkoutSerializer.Serialize(view, Console.Out, formatter, ToolListViewContext.Default);
+        MarkoutSerializer.Serialize(view, Console.Out, new OneLineFormatter(showHeader: !noHeader), ToolListViewContext.Default);
 
         return 0;
+    }
+
+    static string GetToolType(FileInfo f, string installDir)
+    {
+        // Symlink to dotnet-install = CoreCLR (busybox host dispatch)
+        if (f.LinkTarget is not null)
+        {
+            string target = Path.GetFileName(f.LinkTarget);
+            if (target.StartsWith("dotnet-install"))
+                return "CoreCLR";
+
+            // Symlink into _appname/ directory = NAOT multi-file
+            return "NAOT";
+        }
+
+        // Direct executable with _appname/ directory = NAOT multi-file
+        string appDir = Path.Combine(installDir, $"_{f.Name}");
+        if (Directory.Exists(appDir))
+            return "NAOT";
+
+        // Direct executable, no app dir = NAOT single-file
+        return "NAOT";
     }
 
     static bool IsToolEntry(FileInfo f)
