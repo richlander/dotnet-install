@@ -82,8 +82,8 @@ static class CommandLineBuilder
         var listColumnsOption = new Option<string?>("--columns") { Description = "Select columns (comma-separated)" };
         listColumnsOption.Aliases.Add("-S");
         var listJsonOption = new Option<bool>("--json") { Description = "Output as JSON" };
-        var listCommand = new Command("list", "List installed tools");
-        listCommand.Aliases.Add("ls");
+        var listCommand = new Command("ls", "List installed tools");
+        listCommand.Aliases.Add("list");
         listCommand.Options.Add(listNoHeaderOption);
         listCommand.Options.Add(listColumnsOption);
         listCommand.Options.Add(listJsonOption);
@@ -114,8 +114,8 @@ static class CommandLineBuilder
             Description = "Tools to remove",
             Arity = ArgumentArity.OneOrMore
         };
-        var removeCommand = new Command("remove", "Remove installed tools");
-        removeCommand.Aliases.Add("rm");
+        var removeCommand = new Command("rm", "Remove installed tools");
+        removeCommand.Aliases.Add("remove");
         removeCommand.Arguments.Add(removeToolsArg);
         removeCommand.SetAction((parseResult, ct) =>
         {

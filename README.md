@@ -163,9 +163,9 @@ dotnet-install [<project-path>] [command] [options]
 
 Commands:
   setup          Configure shell PATH and create self-link
-  list (ls)      List installed tools
+  ls (list)      List installed tools
   update <tool>  Check for updates and reinstall
-  remove (rm)    Remove installed tools
+  rm (remove)    Remove installed tools
 
 Options:
   --package <name[@version]>   Install a tool from NuGet
