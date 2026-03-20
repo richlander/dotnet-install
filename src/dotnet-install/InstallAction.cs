@@ -5,7 +5,7 @@
 static class InstallAction
 {
     public static async Task<int> RunAsync(
-        string? projectArg,
+        string[] projectArgs,
         string? packageSpec,
         string? gitSpec,
         string? projectPath,
@@ -18,32 +18,66 @@ static class InstallAction
         string installDir = outputDir
             ?? (useLocalBin ? Installer.LocalBinDir : Installer.DefaultInstallDir);
 
-        int result;
-
+        // --package and --github are single-item explicit sources
         if (packageSpec is not null)
         {
-            result = await Installer.InstallPackageAsync(packageSpec, installDir, allowRollForward, requireSourceLink);
+            int r = await Installer.InstallPackageAsync(packageSpec, installDir, allowRollForward, requireSourceLink);
+            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            return r;
         }
-        else if (gitSpec is not null)
+
+        if (gitSpec is not null)
         {
-            result = GitSource.InstallFromGit(gitSpec, installDir, useSsh, projectPath, requireSourceLink);
+            int r = GitSource.InstallFromGit(gitSpec, installDir, useSsh, projectPath, requireSourceLink);
+            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            return r;
         }
-        else if (projectArg is not null)
+
+        // No positional args — show help
+        if (projectArgs.Length == 0)
         {
-            // Check if it's a local path or an unresolved name
-            if (Directory.Exists(projectArg) || File.Exists(projectArg))
+            var rootCommand = CommandLineBuilder.CreateRootCommand();
+            HelpWriter.WriteHelp(rootCommand);
+            return 0;
+        }
+
+        // Multiple args — install each one (skip prompts when multiple specified)
+        bool skipPrompt = projectArgs.Length > 1;
+        int failures = 0;
+        foreach (string arg in projectArgs)
+        {
+            int result = await InstallOneAsync(arg, installDir, useSsh, projectPath, allowRollForward, requireSourceLink, skipPrompt);
+            if (result != 0)
+                failures++;
+        }
+
+        if (failures == 0)
+            ShellHint.PrintIfNeeded(installDir);
+
+        return failures > 0 ? 1 : 0;
+    }
+
+    static async Task<int> InstallOneAsync(
+        string projectArg, string installDir, bool useSsh,
+        string? projectPath, bool allowRollForward, bool requireSourceLink, bool skipPrompt = false)
+    {
+        // Local path
+        if (Directory.Exists(projectArg) || File.Exists(projectArg))
+        {
+            string? projectFile = FindProjectFile(projectArg);
+            if (projectFile is null)
             {
-                string? projectFile = FindProjectFile(projectArg);
-                if (projectFile is null)
-                {
-                    Console.Error.WriteLine($"error: no project file found in '{projectArg}'");
-                    return 1;
-                }
-                result = Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink);
+                Console.Error.WriteLine($"error: no project file found in '{projectArg}'");
+                return 1;
             }
-            else if (projectArg.Contains('/'))
+            return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink);
+        }
+
+        // owner/repo pattern
+        if (projectArg.Contains('/'))
+        {
+            if (!skipPrompt)
             {
-                // owner/repo pattern — prompt before cloning from GitHub
                 string url = useSsh
                     ? $"git@github.com:{projectArg.Split('@')[0]}.git"
                     : $"https://github.com/{projectArg.Split('@')[0]}";
@@ -65,45 +99,34 @@ static class InstallAction
                     Console.Error.WriteLine($"'{projectArg}' is not a local path. Use --github to install from GitHub in non-interactive mode.");
                     return 1;
                 }
+            }
 
-                result = GitSource.InstallFromGit(projectArg, installDir, useSsh, projectPath, requireSourceLink);
+            return GitSource.InstallFromGit(projectArg, installDir, useSsh, projectPath, requireSourceLink);
+        }
+
+        // Bare name — treat as NuGet package
+        if (!skipPrompt)
+        {
+            if (!Console.IsInputRedirected)
+            {
+                Console.Write($"'{projectArg}' is not a local path. Install from NuGet? [Y/n] ");
+                var key = Console.ReadKey(intercept: true);
+                Console.WriteLine();
+
+                if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
+                {
+                    Console.WriteLine("Cancelled.");
+                    return 1;
+                }
             }
             else
             {
-                // Bare name — prompt before installing from NuGet
-                if (!Console.IsInputRedirected)
-                {
-                    Console.Write($"'{projectArg}' is not a local path. Install from NuGet? [Y/n] ");
-                    var key = Console.ReadKey(intercept: true);
-                    Console.WriteLine();
-
-                    if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
-                    {
-                        Console.WriteLine("Cancelled.");
-                        return 1;
-                    }
-                }
-                else
-                {
-                    Console.Error.WriteLine($"'{projectArg}' is not a local path. Use --package to install from NuGet in non-interactive mode.");
-                    return 1;
-                }
-
-                result = await Installer.InstallPackageAsync(projectArg, installDir, allowRollForward, requireSourceLink);
+                Console.Error.WriteLine($"'{projectArg}' is not a local path. Use --package to install from NuGet in non-interactive mode.");
+                return 1;
             }
         }
-        else
-        {
-            // No source specified — show help
-            var rootCommand = CommandLineBuilder.CreateRootCommand();
-            HelpWriter.WriteHelp(rootCommand);
-            return 0;
-        }
 
-        if (result == 0)
-            ShellHint.PrintIfNeeded(installDir);
-
-        return result;
+        return await Installer.InstallPackageAsync(projectArg, installDir, allowRollForward, requireSourceLink);
     }
 
     static InstallSource CreateLocalSource(string projectFile)

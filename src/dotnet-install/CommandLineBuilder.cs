@@ -38,10 +38,10 @@ static class CommandLineBuilder
 
         // --- Install sources (default command arguments/options) ---
 
-        var projectArg = new Argument<string?>("project-path")
+        var projectArg = new Argument<string[]>("project-path")
         {
-            Description = "Path to project file or directory",
-            Arity = ArgumentArity.ZeroOrOne
+            Description = "Projects, packages, or repos to install",
+            Arity = ArgumentArity.ZeroOrMore
         };
         var packageOption = new Option<string?>("--package")
         {
@@ -124,7 +124,7 @@ static class CommandLineBuilder
         // Hidden "install" alias — install is the default action on the root command,
         // but typing "dotnet-install install ..." is natural after using remove/update.
         var installCommand = new Command("install", "Install a .NET tool") { Hidden = true };
-        installCommand.Arguments.Add(new Argument<string?>("project-path") { Arity = ArgumentArity.ZeroOrOne });
+        installCommand.Arguments.Add(new Argument<string[]>("project-path") { Arity = ArgumentArity.ZeroOrMore });
         installCommand.Options.Add(packageOption);
         installCommand.Options.Add(githubOption);
         installCommand.Options.Add(projectOption);
@@ -135,8 +135,9 @@ static class CommandLineBuilder
         installCommand.Options.Add(sourceLinkOption);
         installCommand.SetAction(async (parseResult, ct) =>
         {
+            var args = parseResult.GetValue<string[]>("project-path") ?? [];
             return await InstallAction.RunAsync(
-                parseResult.GetValue<string?>("project-path"),
+                args,
                 parseResult.GetValue(packageOption),
                 parseResult.GetValue(githubOption),
                 parseResult.GetValue(projectOption),
@@ -157,7 +158,7 @@ static class CommandLineBuilder
 
         rootCommand.SetAction(async (parseResult, ct) =>
         {
-            string? project = parseResult.GetValue(projectArg);
+            string[] projects = parseResult.GetValue(projectArg) ?? [];
             string? package = parseResult.GetValue(packageOption);
             string? github = parseResult.GetValue(githubOption);
             string? projectPath = parseResult.GetValue(projectOption);
@@ -168,7 +169,7 @@ static class CommandLineBuilder
             bool requireSourceLink = parseResult.GetValue(sourceLinkOption);
 
             return await InstallAction.RunAsync(
-                project, package, github, projectPath,
+                projects, package, github, projectPath,
                 outputDir, useLocalBin, useSsh, allowRollForward, requireSourceLink);
         });
 
