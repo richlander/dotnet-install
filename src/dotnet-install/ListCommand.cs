@@ -1,3 +1,6 @@
+using DotnetInstall.Views;
+using Markout;
+
 static class ListCommand
 {
     public static int Run(string installDir)
@@ -20,16 +23,12 @@ static class ListCommand
             return 0;
         }
 
-        foreach (var entry in entries)
+        var view = new ToolListView
         {
-            string name = entry.Name;
-            string? target = entry.LinkTarget;
+            Tools = entries.Select(e => new ToolRow(e.Name, e.LinkTarget)).ToList()
+        };
 
-            if (target is not null)
-                Console.WriteLine($"  {name} -> {target}");
-            else
-                Console.WriteLine($"  {name}");
-        }
+        MarkoutSerializer.Serialize(view, Console.Out, new PlainTextFormatter(), ToolListViewContext.Default);
 
         return 0;
     }
