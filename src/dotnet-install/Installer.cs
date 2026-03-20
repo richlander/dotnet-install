@@ -635,7 +635,14 @@ static class Installer
     static void PlaceSingleFile(string executablePath, string installDir, string executableName)
     {
         string dest = Path.Combine(installDir, executableName);
-        File.Copy(executablePath, dest, overwrite: true);
+
+        // Remove existing file/symlink first — File.Copy follows symlinks,
+        // which would write into a stale _appname/ directory from a prior
+        // multi-file install.
+        if (File.Exists(dest) || IsSymlink(dest))
+            File.Delete(dest);
+
+        File.Copy(executablePath, dest);
         SetExecutable(dest);
     }
 

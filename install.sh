@@ -52,6 +52,7 @@ main() {
 
     # Place binary in install directory
     ensure mkdir -p "$INSTALL_DIR"
+    rm -f "$INSTALL_DIR/dotnet-install"
     ensure cp "$_bin" "$INSTALL_DIR/dotnet-install"
     ensure chmod +x "$INSTALL_DIR/dotnet-install"
 

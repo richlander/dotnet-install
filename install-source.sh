@@ -33,6 +33,7 @@ main() {
     fi
 
     mkdir -p "$INSTALL_DIR"
+    rm -f "$INSTALL_DIR/dotnet-install"
     cp "$_bin" "$INSTALL_DIR/dotnet-install"
     chmod +x "$INSTALL_DIR/dotnet-install"
 
