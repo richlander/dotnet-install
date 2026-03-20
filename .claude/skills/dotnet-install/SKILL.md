@@ -5,7 +5,7 @@ description: >
   using dotnet-install.
 argument-hint: >
   [owner/repo | path | --package name
-  | list | remove name]
+  | ls | rm name | search | info | env]
 allowed-tools: Bash, Read, Glob, Grep
 ---
 
@@ -15,32 +15,86 @@ You are helping the user work with `dotnet-install`,
 a tool that installs .NET executables to PATH
 — like `cargo install` and `go install`.
 
+`dotnet-install` relates to `dotnet tool install -g`
+the way yarn relates to npm: it uses the same package
+registry (NuGet) but provides a different installation
+model. Where `dotnet tool install -g` places shim
+scripts in `~/.dotnet/tools/` backed by deeply nested
+binaries in `.store/`, `dotnet-install` places real
+binaries directly in `~/.dotnet/bin/` — a flat,
+transparent layout like Go's `~/go/bin/` or Cargo's
+`~/.cargo/bin/`. Users can acquire dotnet-install
+itself via `dotnet tool install -g` as a bootstrap,
+after which `dotnet-install setup` graduates the tool
+to `~/.dotnet/bin/` and sheds the dotnet tool scaffolding.
+
+## Two directories — don't confuse them
+
+| Directory            | Owner                    | Contents                   |
+| -------------------- | ------------------------ | -------------------------- |
+| `~/.dotnet/tools/`   | `dotnet tool install -g` | Shim scripts → `.store/`   |
+| `~/.dotnet/bin/`     | `dotnet-install`         | Real binaries, flat layout |
+
+`dotnet-install` itself lives at `~/.dotnet/bin/dotnet-install`.
+The env var `DOTNET_INSTALL_HOME` points here.
+
+## Invoking the tool
+
+```bash
+dotnet-install <args>
+# or via dotnet prefix matching:
+dotnet install <args>
+```
+
+When working in this repo (development):
+
+```bash
+dotnet run --project src/dotnet-install -- <args>
+```
+
 ## Project structure
 
 The tool lives at `src/dotnet-install/` in this repo:
 
-- `Program.cs` — CLI entry point, argument parsing,
-  subcommand routing
+- `Program.cs` — CLI entry point
+- `CommandLineBuilder.cs` — System.CommandLine command/option
+  definitions and handler wiring
 - `Installer.cs` — Core install logic: project eval,
-  `dotnet publish`, single/multi-file placement
+  `dotnet publish`, single/multi-file placement,
+  NuGet package install, file-based app support
 - `GitSource.cs` — Git clone/fetch from GitHub repos,
   project discovery, `.dotnet-install.json` manifest
-- `ShellHint.cs` — PATH detection and shell-specific
-  setup instructions
-- `SetupCommand.cs` — Shell PATH config and self-link
+- `ShellHint.cs` — PATH detection, shell-specific
+  setup instructions, `DOTNET_INSTALL_HOME` env var
+- `SetupCommand.cs` — Shell PATH config, self-install
+  from NuGet (bootstrap graduation), shed dotnet tool
+- `EnvCommand.cs` — Print environment info (`cargo env` style)
+- `ProjectSelector.cs` — Interactive arrow-key selector
+  for repos with multiple executable projects
+- `HostDispatch.cs` — Busybox-style dispatch for managed
+  tools (Unix symlink-based, Windows .cmd shim-based)
 - `ListCommand.cs` — Lists installed tools
 - `RemoveCommand.cs` — Removes installed tools
+- `UpdateCommand.cs` — Updates installed tools
+- `SearchCommand.cs` — Search NuGet for packages
+- `InfoCommand.cs` — Show tool details and provenance
+- `OutdatedCommand.cs` — Check for newer versions
+- `RunCommand.cs` — Run without installing (npx-like)
+- `CompletionCommand.cs` — Shell completion setup
+- `HelpWriter.cs` — Markout-based help formatting
 
 ## Three install modes
 
 ### 1. Local project (default)
 
 Builds and installs from a local project directory or the current directory.
+Supports both `.csproj` projects and file-based apps (`.cs` with `#:property` directives).
 
 ```bash
 dotnet install                    # current directory
 dotnet install src/my-tool        # subdirectory
 dotnet install ~/git/my-tool      # explicit path
+dotnet install app.cs             # file-based app
 ```
 
 ### 2. GitHub repository
@@ -67,27 +121,54 @@ dotnet install --package dotnetsay
 dotnet install --package dotnet-counters@9.0.0
 ```
 
+### Multiple tools at once
+
+Positional args can mix sources. When multiple args
+are given, confirmation prompts are skipped.
+
+```bash
+dotnet install dotnetsay dotnet-counters    # two NuGet packages
+dotnet install richlander/dotnetsay app.cs  # GitHub + local file-based app
+```
+
 ## Subcommands
 
 ```bash
-dotnet install list              # list installed tools
-dotnet install remove <tool>     # remove one or more tools
+dotnet install ls                # list installed tools
+dotnet install rm <tool>         # remove one or more tools
+dotnet install update <tool>     # update installed tools
+dotnet install search <query>    # search NuGet
+dotnet install info <tool>       # show tool details
+dotnet install outdated          # check for newer versions
+dotnet install run <pkg> [args]  # run without installing (npx-like)
+dotnet install setup             # configure PATH + DOTNET_INSTALL_HOME
+dotnet install env               # print environment info
+dotnet install completion        # shell completion setup
 ```
 
 ## Key design decisions
 
 - **Install directory**: `~/.dotnet/bin/`
-  (configurable with `-o` or `--local-bin`)
+  (NOT `~/.dotnet/tools/` — this is a separate store)
+  Configurable with `-o` or `--local-bin` (`~/.local/bin/`)
+- **Environment variable**: `DOTNET_INSTALL_HOME` points
+  to the install directory (like `CARGO_HOME`/`GOPATH`)
 - **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
   — persistent clone, `git fetch` on re-install
 - **Single-file binaries** (Native AOT):
   copied directly to install dir
 - **Multi-file binaries**: stored in `_<appname>/`
   subdirectory with a symlink (Unix) or
-  `.cmd` shim (Windows)
+  `.cmd` shim (Windows) — busybox dispatch pattern
 - **Project discovery for git repos**: `--project`
   flag > `.dotnet-install.json` manifest >
-  auto-detect single Exe project (no test projects)
+  auto-detect Exe projects > file-based apps.
+  Multiple projects trigger interactive selector (≤12)
+- **File-based apps**: `.cs` files with `#:property`
+  directives are detected and published directly
+- **Bootstrap graduation**: when installed via
+  `dotnet tool install -g`, `setup` self-installs
+  from NuGet and sheds the dotnet tool scaffolding
 - **Source flags**: `--github`, `--package`, and
   local path are explicit; bare `owner/repo`
   triggers a confirmation prompt
@@ -103,21 +184,20 @@ dotnet build src/dotnet-install/dotnet-install.csproj
 # Run (via dotnet run)
 dotnet run --project src/dotnet-install/dotnet-install.csproj -- <args>
 
-# The project depends on dotnet-inspect (sibling repo at ~/git/dotnet-inspect)
+# Tests
+dotnet run --project test/dotnet-install.Tests
 ```
 
 ## When modifying the tool
 
-- Follow the existing code patterns (manual arg
-  parsing, static classes, top-level statements)
+- CLI is built with System.CommandLine — commands and
+  options defined in `CommandLineBuilder.cs`
+- Help output uses Markout serialization (`HelpWriter.cs`)
 - The project targets `net11.0` with
   `PublishAot=true` — all code must be AOT-compatible
 - Use STJ source generation for any JSON
   serialization (see `ManifestContext` in
   `GitSource.cs`)
-- Error messages: `"  error: <message>"`
-  (two-space indent, lowercase)
-- Status messages: `"  <message>"`
-  (two-space indent)
-- Test with all three install modes and both
-  `list`/`remove` subcommands
+- Error messages: `"error: <message>"` to stderr
+- Status messages to stdout
+- Test with all three install modes and subcommands
