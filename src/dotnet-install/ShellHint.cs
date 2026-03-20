@@ -46,7 +46,7 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
             "zsh" => "~/.zshrc",
             "bash" => GetBashRcFile(),
             "fish" => "~/.config/fish/config.fish",
-            _ => null
+            _ => OperatingSystem.IsWindows() ? null : "~/.profile"
         };
 
         string? rcFileAbsolute = rcFile?.Replace("~", home);

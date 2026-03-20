@@ -65,22 +65,9 @@ main() {
     rm -rf "$_dir"
 
     # Run setup to configure shell PATH.
-    # Connect /dev/tty for interactive prompts when piped.
-    local _need_tty=yes
-    for arg in "$@"; do
-        case "$arg" in
-            -y) _need_tty=no ;;
-        esac
-    done
-
-    if [ "$_need_tty" = "yes" ] && [ ! -t 0 ]; then
-        if [ ! -t 1 ]; then
-            err "unable to run interactively; use -y to accept defaults"
-        fi
-        "$INSTALL_DIR/dotnet-install" setup < /dev/tty
-    else
-        "$INSTALL_DIR/dotnet-install" setup
-    fi
+    # SetupCommand handles non-interactive mode automatically
+    # (auto-writes rc file when stdin is redirected).
+    "$INSTALL_DIR/dotnet-install" setup
 }
 
 get_latest_version() {
