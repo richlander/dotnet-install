@@ -43,16 +43,7 @@ For contributors or local development:
 ./install-source.sh
 ```
 
-Builds from the local source tree via `dotnet run` (requires the .NET SDK).
-
-### From NuGet package
-
-```bash
-./install-package.sh
-```
-
-Bootstraps via `dotnet run`, then installs the published NuGet package
-(requires the .NET SDK).
+Builds from the local source tree via `dotnet publish` (requires the .NET SDK).
 
 ### Manual setup
 
