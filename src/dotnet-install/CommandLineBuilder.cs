@@ -79,6 +79,7 @@ static class CommandLineBuilder
         });
 
         var listNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
+        listNoHeaderOption.Aliases.Add("--nh");
         var listColumnsOption = new Option<string?>("--columns") { Description = "Select columns (comma-separated)" };
         listColumnsOption.Aliases.Add("-S");
         var listCommand = new Command("list", "List installed tools");
