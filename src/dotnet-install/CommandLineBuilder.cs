@@ -82,15 +82,18 @@ static class CommandLineBuilder
         listNoHeaderOption.Aliases.Add("--nh");
         var listColumnsOption = new Option<string?>("--columns") { Description = "Select columns (comma-separated)" };
         listColumnsOption.Aliases.Add("-S");
+        var listJsonOption = new Option<bool>("--json") { Description = "Output as JSON" };
         var listCommand = new Command("list", "List installed tools");
         listCommand.Aliases.Add("ls");
         listCommand.Options.Add(listNoHeaderOption);
         listCommand.Options.Add(listColumnsOption);
+        listCommand.Options.Add(listJsonOption);
         listCommand.SetAction((parseResult, ct) =>
         {
             bool noHeader = parseResult.GetValue(listNoHeaderOption);
             string? columns = parseResult.GetValue(listColumnsOption);
-            ListCommand.Run(Installer.DefaultInstallDir, noHeader, columns);
+            bool json = parseResult.GetValue(listJsonOption);
+            ListCommand.Run(Installer.DefaultInstallDir, noHeader, columns, json);
             return Task.FromResult(0);
         });
 
@@ -148,11 +151,105 @@ static class CommandLineBuilder
                 parseResult.GetValue(sourceLinkOption));
         });
 
+        // --- search command ---
+        var searchQueryArg = new Argument<string>("query") { Description = "NuGet search query" };
+        var searchTakeOption = new Option<int>("--take") { Description = "Max results to return", DefaultValueFactory = _ => 20 };
+        var searchNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
+        searchNoHeaderOption.Aliases.Add("--nh");
+        var searchColumnsOption = new Option<string?>("--columns") { Description = "Select columns (comma-separated)" };
+        searchColumnsOption.Aliases.Add("-S");
+        var searchJsonOption = new Option<bool>("--json") { Description = "Output as JSON" };
+        var searchCommand = new Command("search", "Search NuGet for tool packages");
+        searchCommand.Arguments.Add(searchQueryArg);
+        searchCommand.Options.Add(searchTakeOption);
+        searchCommand.Options.Add(searchNoHeaderOption);
+        searchCommand.Options.Add(searchColumnsOption);
+        searchCommand.Options.Add(searchJsonOption);
+        searchCommand.SetAction(async (parseResult, ct) =>
+        {
+            return await SearchCommand.RunAsync(
+                parseResult.GetValue(searchQueryArg)!,
+                parseResult.GetValue(searchTakeOption),
+                parseResult.GetValue(searchNoHeaderOption),
+                parseResult.GetValue(searchColumnsOption),
+                parseResult.GetValue(searchJsonOption));
+        });
+
+        // --- info command ---
+        var infoToolArg = new Argument<string>("tool") { Description = "Name of installed tool" };
+        var infoJsonOption = new Option<bool>("--json") { Description = "Output as JSON" };
+        var infoCommand = new Command("info", "Show detailed information about an installed tool");
+        infoCommand.Arguments.Add(infoToolArg);
+        infoCommand.Options.Add(infoJsonOption);
+        infoCommand.SetAction((parseResult, ct) =>
+        {
+            return Task.FromResult(InfoCommand.Run(
+                Installer.DefaultInstallDir,
+                parseResult.GetValue(infoToolArg)!,
+                parseResult.GetValue(infoJsonOption)));
+        });
+
+        // --- outdated command ---
+        var outdatedNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
+        outdatedNoHeaderOption.Aliases.Add("--nh");
+        var outdatedColumnsOption = new Option<string?>("--columns") { Description = "Select columns (comma-separated)" };
+        outdatedColumnsOption.Aliases.Add("-S");
+        var outdatedJsonOption = new Option<bool>("--json") { Description = "Output as JSON" };
+        var outdatedCommand = new Command("outdated", "Check for available updates without installing");
+        outdatedCommand.Options.Add(outdatedNoHeaderOption);
+        outdatedCommand.Options.Add(outdatedColumnsOption);
+        outdatedCommand.Options.Add(outdatedJsonOption);
+        outdatedCommand.SetAction(async (parseResult, ct) =>
+        {
+            return await OutdatedCommand.RunAsync(
+                Installer.DefaultInstallDir,
+                parseResult.GetValue(outdatedNoHeaderOption),
+                parseResult.GetValue(outdatedColumnsOption),
+                parseResult.GetValue(outdatedJsonOption));
+        });
+
+        // --- run command ---
+        var runPackageArg = new Argument<string>("package") { Description = "NuGet package name[@version]" };
+        var runToolArgsArg = new Argument<string[]>("args")
+        {
+            Description = "Arguments to pass to the tool",
+            Arity = ArgumentArity.ZeroOrMore
+        };
+        var runRollForwardOption = new Option<bool>("--allow-roll-forward")
+        {
+            Description = "Allow tool to run on a newer .NET runtime version"
+        };
+        var runCommand = new Command("run", "Run a NuGet tool without installing it (like npx)");
+        runCommand.Arguments.Add(runPackageArg);
+        runCommand.Arguments.Add(runToolArgsArg);
+        runCommand.Options.Add(runRollForwardOption);
+        runCommand.SetAction(async (parseResult, ct) =>
+        {
+            return await RunCommand.RunAsync(
+                parseResult.GetValue(runPackageArg)!,
+                parseResult.GetValue(runToolArgsArg) ?? [],
+                parseResult.GetValue(runRollForwardOption));
+        });
+
+        // --- completion command ---
+        var completionShellArg = new Argument<string>("shell") { Description = "Shell type (bash, zsh, fish, powershell)" };
+        var completionCommand = new Command("completion", "Generate shell completion script");
+        completionCommand.Arguments.Add(completionShellArg);
+        completionCommand.SetAction((parseResult, ct) =>
+        {
+            return Task.FromResult(CompletionCommand.Run(parseResult.GetValue(completionShellArg)!));
+        });
+
         rootCommand.Subcommands.Add(setupCommand);
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(updateCommand);
         rootCommand.Subcommands.Add(removeCommand);
         rootCommand.Subcommands.Add(installCommand);
+        rootCommand.Subcommands.Add(searchCommand);
+        rootCommand.Subcommands.Add(infoCommand);
+        rootCommand.Subcommands.Add(outdatedCommand);
+        rootCommand.Subcommands.Add(runCommand);
+        rootCommand.Subcommands.Add(completionCommand);
 
         // --- Default install action ---
 

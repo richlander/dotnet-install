@@ -1,14 +1,17 @@
+using System.Text.Json;
+using DotnetInstall.Json;
 using DotnetInstall.Views;
 using Markout;
 using Markout.Formatting;
 
 static class ListCommand
 {
-    public static int Run(string installDir, bool noHeader = false, string? columns = null)
+    public static int Run(string installDir, bool noHeader = false, string? columns = null, bool json = false)
     {
         if (!Directory.Exists(installDir))
         {
-            Console.WriteLine("No tools installed.");
+            if (json) Console.WriteLine("[]");
+            else Console.WriteLine("No tools installed.");
             return 0;
         }
 
@@ -20,7 +23,17 @@ static class ListCommand
 
         if (entries.Count == 0)
         {
-            Console.WriteLine("No tools installed.");
+            if (json) Console.WriteLine("[]");
+            else Console.WriteLine("No tools installed.");
+            return 0;
+        }
+
+        if (json)
+        {
+            var jsonEntries = entries
+                .Select(e => new ToolListEntry(e.Name, GetToolType(e, installDir)))
+                .ToArray();
+            Console.WriteLine(JsonSerializer.Serialize(jsonEntries, InstallJsonContext.Default.ToolListEntryArray));
             return 0;
         }
 
