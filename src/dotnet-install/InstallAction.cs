@@ -33,9 +33,14 @@ static class InstallAction
             return r;
         }
 
-        // No positional args — show help
+        // No positional args — run setup if needed, otherwise show help
         if (projectArgs.Length == 0)
         {
+            if (!ShellConfig.IsOnPath(installDir))
+            {
+                return await SetupCommand.Run(installDir);
+            }
+
             var rootCommand = CommandLineBuilder.CreateRootCommand();
             HelpWriter.WriteHelp(rootCommand);
             return 0;
