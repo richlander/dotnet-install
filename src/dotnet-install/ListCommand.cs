@@ -31,7 +31,10 @@ static class ListCommand
         if (json)
         {
             var jsonEntries = entries
-                .Select(e => new ToolListEntry(e.Name, GetToolType(e, installDir)))
+                .Select(e => {
+                    var m = ReadManifest(e, installDir);
+                    return new ToolListEntry(e.Name, GetDisplayVersion(m), GetToolType(e, installDir), m?.Source?.Type);
+                })
                 .ToArray();
             Console.WriteLine(JsonSerializer.Serialize(jsonEntries, InstallJsonContext.Default.ToolListEntryArray));
             return 0;
@@ -39,7 +42,10 @@ static class ListCommand
 
         var view = new ToolListView
         {
-            Tools = entries.Select(e => new ToolRow(e.Name, GetToolType(e, installDir))).ToList()
+            Tools = entries.Select(e => {
+                var m = ReadManifest(e, installDir);
+                return new ToolRow(e.Name, GetDisplayVersion(m) ?? "", GetToolType(e, installDir), m?.Source?.Type ?? "");
+            }).ToList()
         };
 
         var writerOptions = new MarkoutWriterOptions();
@@ -81,6 +87,30 @@ static class ListCommand
 
         // Direct executable, no app dir = NAOT single-file
         return "NAOT";
+    }
+
+    static ToolManifest? ReadManifest(FileInfo f, string installDir)
+    {
+        string toolName = Path.GetFileNameWithoutExtension(f.Name);
+        string appDir = Path.Combine(installDir, $"_{toolName}");
+        return ToolMetadata.Read(appDir);
+    }
+
+    /// <summary>
+    /// Version for display: package version if available, short commit SHA for git sources.
+    /// </summary>
+    static string? GetDisplayVersion(ToolManifest? manifest)
+    {
+        if (manifest?.Source is null) return null;
+
+        if (manifest.Source.Version is not null)
+            return manifest.Source.Version;
+
+        // Git-sourced tools: show short commit
+        if (manifest.Source.Commit is { Length: >= 7 } commit)
+            return commit[..7];
+
+        return null;
     }
 
     static bool IsToolEntry(FileInfo f)
