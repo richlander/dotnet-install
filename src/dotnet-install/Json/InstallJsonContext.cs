@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace DotnetInstall.Json;
 
-public record ToolListEntry(string Name, string Type);
+public record ToolListEntry(string Name, string? Version, string Type, string? Source);
 
 public record ToolInfoEntry(
     string Name,

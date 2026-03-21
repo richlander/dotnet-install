@@ -13,7 +13,7 @@ public class ToolListView
 }
 
 [MarkoutSerializable]
-public record ToolRow(string Name, string Type);
+public record ToolRow(string Name, string Version, string Type, string Source);
 
 [MarkoutContext(typeof(ToolListView))]
 public partial class ToolListViewContext : MarkoutSerializerContext
