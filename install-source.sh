@@ -52,9 +52,9 @@ main() {
         if [ ! -t 1 ]; then
             err "unable to run interactively; use -y to accept defaults"
         fi
-        "$INSTALL_DIR/dotnet-install" doctor < /dev/tty
+        "$INSTALL_DIR/dotnet-install" doctor --fix < /dev/tty
     else
-        "$INSTALL_DIR/dotnet-install" doctor
+        "$INSTALL_DIR/dotnet-install" doctor --fix
     fi
 }
 

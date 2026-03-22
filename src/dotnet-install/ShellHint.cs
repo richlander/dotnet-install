@@ -116,7 +116,7 @@ static class ShellHint
         {
             Console.WriteLine($"Run doctor to configure your shell:");
             Console.WriteLine();
-            Console.WriteLine($"  dotnet-install doctor");
+            Console.WriteLine($"  dotnet-install doctor --fix");
         }
         else
         {
@@ -133,7 +133,7 @@ static class ShellHint
     {
         Console.WriteLine($"Run doctor to configure your PATH:");
         Console.WriteLine();
-        Console.WriteLine($"  dotnet-install doctor");
+        Console.WriteLine($"  dotnet-install doctor --fix");
         Console.WriteLine();
     }
 }

@@ -3,90 +3,134 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 /// <summary>
-/// Validate and fix dotnet-install environment: binary, PATH, shell config, global tool migration.
+/// Validate dotnet-install environment. Reports issues by default; --fix applies remediation.
 /// </summary>
 static class DoctorCommand
 {
-    public static async Task<int> Run(string installDir)
+    public static async Task<int> Run(string installDir, bool fix = false)
     {
         installDir = Path.GetFullPath(installDir);
         Directory.CreateDirectory(installDir);
 
+        int issues = 0;
+
         Console.WriteLine();
 
         // Step 1: Ensure dotnet-install binary is in the install directory
-        await SetupCommand.EnsureLocalInstallAsync(installDir);
+        issues += await CheckBinaryAsync(installDir, fix);
 
         // Step 2: Shell PATH configuration
-        CheckShellPath(installDir);
+        issues += CheckShellPath(installDir, fix);
 
         // Step 3: Shed bootstrap scaffolding (dotnet tool) if present
-        ShedBootstrapTool(installDir);
+        issues += ShedBootstrapTool(installDir, fix);
 
         // Step 4: Drain global tools if configured
         var config = UserConfig.Read(installDir);
         if (config.ManageGlobalTools)
         {
-            await DrainGlobalToolsAsync(installDir);
+            issues += await DrainGlobalToolsAsync(installDir, fix);
         }
 
         Console.WriteLine();
+
+        if (issues > 0 && !fix)
+        {
+            Console.WriteLine($"Found {issues} issue(s). Run `dotnet-install doctor --fix` to repair.");
+        }
+
         return 0;
+    }
+
+    /// <summary>
+    /// Check that dotnet-install binary exists in the install directory.
+    /// </summary>
+    static async Task<int> CheckBinaryAsync(string installDir, bool fix)
+    {
+        string targetPath = Path.Combine(installDir, "dotnet-install");
+
+        if (File.Exists(targetPath))
+        {
+            Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
+            return 0;
+        }
+
+        if (!fix)
+        {
+            Console.WriteLine($"⚠ dotnet-install is not in {DisplayPath(installDir)}");
+            return 1;
+        }
+
+        Console.WriteLine($"⚠ dotnet-install is not in {DisplayPath(installDir)}");
+        Console.WriteLine($"  Installing...");
+        int result = await Installer.InstallPackageAsync("dotnet-install", installDir);
+        if (result == 0)
+            Console.WriteLine($"  ✔ Installed dotnet-install");
+        else
+            Console.WriteLine($"  ⚠ Failed to install dotnet-install");
+        return result == 0 ? 0 : 1;
     }
 
     /// <summary>
     /// Check PATH configuration: is install dir on PATH, is rc file configured?
     /// </summary>
-    static void CheckShellPath(string installDir)
+    static int CheckShellPath(string installDir, bool fix)
     {
         if (OperatingSystem.IsWindows())
-        {
-            CheckWindowsPath(installDir);
-            return;
-        }
+            return CheckWindowsPath(installDir, fix);
 
         var shellConfig = ShellConfig.Detect(installDir);
 
         if (ShellConfig.IsOnPath(installDir))
         {
             Console.WriteLine($"✔ {shellConfig.DisplayDir} is on PATH");
+            return 0;
         }
-        else if (shellConfig.RcFile is not null && shellConfig.RcFileContainsPath())
+
+        if (shellConfig.RcFile is not null && shellConfig.RcFileContainsPath())
         {
             Console.WriteLine($"✔ {shellConfig.RcFile} configures PATH");
             Console.WriteLine($"  Restart your shell or run: source {shellConfig.RcFile}");
+            return 0;
         }
-        else if (shellConfig.RcFile is not null)
-        {
-            Console.WriteLine($"⚠ {shellConfig.DisplayDir} is not on PATH");
 
-            if (Console.IsInputRedirected)
-            {
-                WritePathToRcFile(shellConfig);
-            }
-            else
-            {
-                Console.Write($"  Add to {shellConfig.RcFile}? [Y/n] ");
-                var key = Console.ReadKey(intercept: true);
-                Console.WriteLine();
-
-                if (key.Key != ConsoleKey.Escape && key.KeyChar is not ('n' or 'N'))
-                {
-                    WritePathToRcFile(shellConfig);
-                }
-                else
-                {
-                    Console.WriteLine($"  Add manually: echo '{shellConfig.RcLine}' >> {shellConfig.RcFile}");
-                }
-            }
-        }
-        else
+        // Not configured
+        if (shellConfig.RcFile is null)
         {
             Console.WriteLine($"⚠ {shellConfig.DisplayDir} is not on PATH");
             Console.WriteLine($"  Add to your shell config:");
             Console.WriteLine($"    {shellConfig.EnvLine}");
             Console.WriteLine($"    {shellConfig.ExportLine}");
+            return 1;
         }
+
+        Console.WriteLine($"⚠ {shellConfig.DisplayDir} is not on PATH");
+
+        if (!fix)
+        {
+            Console.WriteLine($"  Run with --fix to add to {shellConfig.RcFile}");
+            return 1;
+        }
+
+        // Fix mode: write to rc file (auto-write when non-interactive, prompt otherwise)
+        if (Console.IsInputRedirected)
+        {
+            WritePathToRcFile(shellConfig);
+            return 0;
+        }
+
+        Console.Write($"  Add to {shellConfig.RcFile}? [Y/n] ");
+        var key = Console.ReadKey(intercept: true);
+        Console.WriteLine();
+
+        if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
+        {
+            Console.WriteLine($"  Skipped. Add manually: echo '{shellConfig.RcLine}' >> {shellConfig.RcFile}");
+            return 1;
+        }
+
+        WritePathToRcFile(shellConfig);
+        return 0;
     }
 
     static void WritePathToRcFile(ShellConfig config)
@@ -106,7 +150,7 @@ static class DoctorCommand
         Console.WriteLine($"    Restart your shell or run: source {config.RcFile}");
     }
 
-    static void CheckWindowsPath(string installDir)
+    static int CheckWindowsPath(string installDir, bool fix)
     {
         string? envHome = Environment.GetEnvironmentVariable(ShellConfig.EnvVar, EnvironmentVariableTarget.User);
         bool homeSet = envHome is not null &&
@@ -124,17 +168,25 @@ static class DoctorCommand
         {
             Console.WriteLine($"✔ {ShellConfig.EnvVar} is set");
             Console.WriteLine($"✔ {DisplayPath(installDir)} is in user PATH");
-            return;
+            return 0;
         }
+
+        if (!homeSet)
+            Console.WriteLine($"⚠ {ShellConfig.EnvVar} is not set");
+        if (!pathSet)
+            Console.WriteLine($"⚠ {DisplayPath(installDir)} is not in user PATH");
+
+        if (!fix)
+            return 1;
 
         if (!Console.IsInputRedirected)
         {
-            Console.Write($"⚠ Configure {ShellConfig.EnvVar} and PATH? [Y/n] ");
+            Console.Write($"  Configure {ShellConfig.EnvVar} and PATH? [Y/n] ");
             var key = Console.ReadKey(intercept: true);
             Console.WriteLine();
 
             if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
-                return;
+                return 1;
         }
 
         if (!homeSet)
@@ -153,25 +205,29 @@ static class DoctorCommand
         }
 
         Console.WriteLine($"  Restart your terminal to pick up the change.");
+        return 0;
     }
 
     /// <summary>
     /// If dotnet-install was bootstrapped via `dotnet tool install -g`, remove the dotnet tool version.
     /// </summary>
-    static void ShedBootstrapTool(string installDir)
+    static int ShedBootstrapTool(string installDir, bool fix)
     {
         var tools = ListDotnetGlobalTools();
-        if (tools is null) return;
+        if (tools is null) return 0;
 
         var selfTool = tools.FirstOrDefault(t =>
             t.PackageId.Equals("dotnet-install", StringComparison.OrdinalIgnoreCase));
 
-        if (selfTool is null) return;
+        if (selfTool is null) return 0;
 
         string localBinary = Path.Combine(installDir, "dotnet-install");
-        if (!File.Exists(localBinary)) return;
+        if (!File.Exists(localBinary)) return 0;
 
         Console.WriteLine("⚠ dotnet-install is still registered as a dotnet global tool");
+
+        if (!fix)
+            return 1;
 
         var psi = new ProcessStartInfo("dotnet", ["tool", "uninstall", "-g", "dotnet-install"])
         {
@@ -180,23 +236,27 @@ static class DoctorCommand
         };
 
         using var process = Process.Start(psi);
-        if (process is null) return;
+        if (process is null) return 1;
         process.WaitForExit();
 
         if (process.ExitCode == 0)
+        {
             Console.WriteLine("  ✔ Removed bootstrap dotnet tool");
-        else
-            Console.WriteLine("  ⚠ Failed to remove bootstrap dotnet tool");
+            return 0;
+        }
+
+        Console.WriteLine("  ⚠ Failed to remove bootstrap dotnet tool");
+        return 1;
     }
 
     /// <summary>
     /// Drain dotnet global tools: reinstall each via dotnet-install, then remove the dotnet tool.
     /// Only removes a dotnet tool after dotnet-install successfully installs it.
     /// </summary>
-    static async Task DrainGlobalToolsAsync(string installDir)
+    static async Task<int> DrainGlobalToolsAsync(string installDir, bool fix)
     {
         var tools = ListDotnetGlobalTools();
-        if (tools is null || tools.Count == 0) return;
+        if (tools is null || tools.Count == 0) return 0;
 
         // Filter out dotnet-install itself (already handled by shed)
         var candidates = tools
@@ -206,12 +266,20 @@ static class DoctorCommand
         if (candidates.Count == 0)
         {
             Console.WriteLine("✔ No dotnet global tools to drain");
-            return;
+            return 0;
         }
 
         Console.WriteLine($"⚠ {candidates.Count} dotnet global tool(s) to drain");
 
+        if (!fix)
+        {
+            foreach (var tool in candidates)
+                Console.WriteLine($"  {tool.PackageId} {tool.Version}");
+            return 1;
+        }
+
         int drained = 0;
+        int failed = 0;
         foreach (var tool in candidates)
         {
             Console.WriteLine($"  Installing {tool.PackageId}...");
@@ -221,6 +289,7 @@ static class DoctorCommand
             if (result != 0)
             {
                 Console.WriteLine($"  ⚠ Failed to install {tool.PackageId} — skipping");
+                failed++;
                 continue;
             }
 
@@ -243,12 +312,15 @@ static class DoctorCommand
                 else
                 {
                     Console.WriteLine($"  ⚠ Installed {tool.PackageId} but failed to remove dotnet tool");
+                    failed++;
                 }
             }
         }
 
         if (drained > 0)
             Console.WriteLine($"  Drained {drained} tool(s)");
+
+        return failed > 0 ? 1 : 0;
     }
 
     /// <summary>

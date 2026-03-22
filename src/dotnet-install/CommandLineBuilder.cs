@@ -71,10 +71,17 @@ static class CommandLineBuilder
 
         // --- Subcommands ---
 
-        var doctorCommand = new Command("doctor", "Validate and fix environment setup");
+        var doctorFixOption = new Option<bool>("--fix")
+        {
+            Description = "Attempt to repair issues found"
+        };
+        doctorFixOption.Aliases.Add("--repair");
+        var doctorCommand = new Command("doctor", "Check environment setup");
+        doctorCommand.Options.Add(doctorFixOption);
         doctorCommand.SetAction(async (parseResult, ct) =>
         {
-            return await DoctorCommand.Run(Installer.DefaultInstallDir);
+            bool fix = parseResult.GetValue(doctorFixOption);
+            return await DoctorCommand.Run(Installer.DefaultInstallDir, fix);
         });
 
         var configKeyArg = new Argument<string?>("key")

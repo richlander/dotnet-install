@@ -72,7 +72,7 @@ main() {
     # Run doctor to configure shell PATH.
     # DoctorCommand handles non-interactive mode automatically
     # (auto-writes rc file when stdin is redirected).
-    "$INSTALL_DIR/dotnet-install" doctor
+    "$INSTALL_DIR/dotnet-install" doctor --fix
 }
 
 get_latest_version() {
