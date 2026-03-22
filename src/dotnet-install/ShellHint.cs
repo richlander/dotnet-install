@@ -1,5 +1,5 @@
 /// <summary>
-/// Shell configuration detection — shared by ShellHint (print-only) and SetupCommand (write).
+/// Shell configuration detection — shared by ShellHint (print-only) and DoctorCommand (write).
 /// </summary>
 record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, string ExportLine, string EnvLine, string DisplayDir)
 {
@@ -114,9 +114,9 @@ static class ShellHint
     {
         if (config.RcFile is not null)
         {
-            Console.WriteLine($"Run setup to configure your shell:");
+            Console.WriteLine($"Run doctor to configure your shell:");
             Console.WriteLine();
-            Console.WriteLine($"  dotnet-install setup");
+            Console.WriteLine($"  dotnet-install doctor --fix");
         }
         else
         {
@@ -131,9 +131,9 @@ static class ShellHint
 
     static void PrintWindowsHint(string displayDir, string absoluteDir)
     {
-        Console.WriteLine($"Run setup to configure your PATH:");
+        Console.WriteLine($"Run doctor to configure your PATH:");
         Console.WriteLine();
-        Console.WriteLine($"  dotnet-install setup");
+        Console.WriteLine($"  dotnet-install doctor --fix");
         Console.WriteLine();
     }
 }

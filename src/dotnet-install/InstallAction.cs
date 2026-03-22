@@ -38,7 +38,7 @@ static class InstallAction
         {
             if (!ShellConfig.IsOnPath(installDir))
             {
-                return await SetupCommand.Run(installDir);
+                return await DoctorCommand.Run(installDir, fix: true);
             }
 
             var rootCommand = CommandLineBuilder.CreateRootCommand();
