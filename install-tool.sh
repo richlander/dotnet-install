@@ -22,7 +22,7 @@ main() {
 
     # Graduate to standalone binary and remove dotnet tool
     say "graduating to standalone install..."
-    dotnet-install setup
+    dotnet-install doctor
 }
 
 say() {

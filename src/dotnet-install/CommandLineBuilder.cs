@@ -71,10 +71,31 @@ static class CommandLineBuilder
 
         // --- Subcommands ---
 
-        var setupCommand = new Command("setup", "Configure shell PATH and install locally");
-        setupCommand.SetAction(async (parseResult, ct) =>
+        var doctorCommand = new Command("doctor", "Validate and fix environment setup");
+        doctorCommand.SetAction(async (parseResult, ct) =>
         {
-            return await SetupCommand.Run(Installer.DefaultInstallDir);
+            return await DoctorCommand.Run(Installer.DefaultInstallDir);
+        });
+
+        var configKeyArg = new Argument<string?>("key")
+        {
+            Description = "Config key to get or set",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+        var configValueArg = new Argument<string?>("value")
+        {
+            Description = "Value to set",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+        var configCommand = new Command("config", "View and update settings");
+        configCommand.Arguments.Add(configKeyArg);
+        configCommand.Arguments.Add(configValueArg);
+        configCommand.SetAction((parseResult, ct) =>
+        {
+            return Task.FromResult(ConfigCommand.Run(
+                Installer.DefaultInstallDir,
+                parseResult.GetValue(configKeyArg),
+                parseResult.GetValue(configValueArg)));
         });
 
         var listNoHeaderOption = new Option<bool>("--no-header") { Description = "Suppress column headers" };
@@ -246,7 +267,8 @@ static class CommandLineBuilder
             return Task.FromResult(0);
         });
 
-        rootCommand.Subcommands.Add(setupCommand);
+        rootCommand.Subcommands.Add(doctorCommand);
+        rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(updateCommand);
         rootCommand.Subcommands.Add(removeCommand);

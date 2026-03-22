@@ -3,7 +3,7 @@
 # Usage: ./install-source.sh
 #
 # Publishes a Native AOT binary from the local source tree and places
-# it in ~/.dotnet/bin/. Runs `dotnet-install setup` to configure your
+# it in ~/.dotnet/bin/. Runs `dotnet-install doctor` to configure your
 # shell PATH.
 #
 # Requires the .NET SDK.
@@ -39,7 +39,7 @@ main() {
 
     echo "  Installed to ${INSTALL_DIR}/dotnet-install"
 
-    # Run setup to configure shell PATH.
+    # Run doctor to configure shell PATH.
     # Connect /dev/tty for interactive prompts when piped.
     local _need_tty=yes
     for arg in "$@"; do
@@ -52,9 +52,9 @@ main() {
         if [ ! -t 1 ]; then
             err "unable to run interactively; use -y to accept defaults"
         fi
-        "$INSTALL_DIR/dotnet-install" setup < /dev/tty
+        "$INSTALL_DIR/dotnet-install" doctor < /dev/tty
     else
-        "$INSTALL_DIR/dotnet-install" setup
+        "$INSTALL_DIR/dotnet-install" doctor
     fi
 }
 

@@ -3,7 +3,7 @@
 # Usage: curl --proto '=https' --tlsv1.2 -sSfL https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
 #
 # Downloads a pre-built Native AOT binary from GitHub Releases,
-# places it in ~/.dotnet/bin/, and runs `dotnet-install setup`
+# places it in ~/.dotnet/bin/, and runs `dotnet-install doctor`
 # to configure your shell PATH.
 #
 # No .NET SDK required.
@@ -69,10 +69,10 @@ main() {
     # Clean up archive
     rm -rf "$_dir"
 
-    # Run setup to configure shell PATH.
-    # SetupCommand handles non-interactive mode automatically
+    # Run doctor to configure shell PATH.
+    # DoctorCommand handles non-interactive mode automatically
     # (auto-writes rc file when stdin is redirected).
-    "$INSTALL_DIR/dotnet-install" setup
+    "$INSTALL_DIR/dotnet-install" doctor
 }
 
 get_latest_version() {
