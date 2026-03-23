@@ -16,6 +16,14 @@ class UserConfig
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool ManageGlobalTools { get; set; }
 
+    /// <summary>
+    /// When true, suppress the PATH tip shown in ephemeral shells
+    /// where the install dir is configured but not yet active.
+    /// </summary>
+    [JsonPropertyName("tip.quiet")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool TipQuiet { get; set; }
+
     static string GetPath(string installDir) =>
         Path.Combine(installDir, FileName);
 
@@ -49,6 +57,7 @@ class UserConfig
     internal string? Get(string key) => key switch
     {
         "manage-global-tools" => ManageGlobalTools.ToString().ToLowerInvariant(),
+        "tip.quiet" => TipQuiet.ToString().ToLowerInvariant(),
         _ => null
     };
 
@@ -65,6 +74,9 @@ class UserConfig
             case "manage-global-tools":
                 ManageGlobalTools = boolValue;
                 return true;
+            case "tip.quiet":
+                TipQuiet = boolValue;
+                return true;
             default:
                 return false;
         }
@@ -75,7 +87,8 @@ class UserConfig
     /// </summary>
     internal static readonly (string Key, string Description)[] Keys =
     [
-        ("manage-global-tools", "Drain dotnet global tools into dotnet-install during doctor")
+        ("manage-global-tools", "Drain dotnet global tools into dotnet-install during doctor"),
+        ("tip.quiet", "Suppress PATH tips in ephemeral shells")
     ];
 }
 
