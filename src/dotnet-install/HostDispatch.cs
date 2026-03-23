@@ -159,10 +159,10 @@ static unsafe class HostDispatch
         try
         {
             for (int i = 0; i < allArgs.Count; i++)
-                nativeArgs[i] = HostFxr.MarshalString(allArgs[i]);
+                nativeArgs[i] = PlatformStringMarshaller.ConvertToUnmanaged(allArgs[i]);
             nativeArgs[allArgs.Count] = 0; // null terminator
 
-            nint programPtr = HostFxr.MarshalString(program);
+            nint programPtr = PlatformStringMarshaller.ConvertToUnmanaged(program);
             try
             {
                 fixed (nint* argv = nativeArgs)
@@ -178,13 +178,13 @@ static unsafe class HostDispatch
             }
             finally
             {
-                HostFxr.FreeString(programPtr);
+                PlatformStringMarshaller.Free(programPtr);
             }
         }
         finally
         {
             foreach (nint ptr in nativeArgs)
-                HostFxr.FreeString(ptr);
+                PlatformStringMarshaller.Free(ptr);
         }
     }
 

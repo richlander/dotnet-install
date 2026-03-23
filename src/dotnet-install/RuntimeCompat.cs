@@ -16,8 +16,6 @@ static unsafe class RuntimeCompat
         string? RequiredFramework,
         string? RequiredVersion);
 
-    internal record FrameworkInfo(string Name, string Version);
-
     /// <summary>
     /// Check if a managed tool's runtimeconfig.json can be satisfied by installed runtimes.
     /// If not, determines whether --allow-roll-forward would help.
@@ -49,52 +47,15 @@ static unsafe class RuntimeCompat
     /// </summary>
     internal static List<FrameworkInfo> GetInstalledRuntimes()
     {
-        var results = new List<FrameworkInfo>();
-        var handle = GCHandle.Alloc(results);
-
         try
         {
-            string? dotnetRoot = HostFxr.DotnetRoot;
-            nint rootPtr = dotnetRoot is not null ? HostFxr.MarshalString(dotnetRoot) : 0;
-
-            try
-            {
-                HostFxr.GetDotnetEnvironmentInfo(
-                    rootPtr, 0, &OnEnvironmentInfo, (nint)handle);
-            }
-            finally
-            {
-                HostFxr.FreeString(rootPtr);
-            }
+            if (!HostFxr.IsLoaded) return [];
+            var info = HostFxr.GetEnvironmentInfo();
+            return [.. info.Frameworks];
         }
         catch
         {
-            // hostfxr unavailable
-        }
-        finally
-        {
-            handle.Free();
-        }
-
-        return results;
-    }
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    static void OnEnvironmentInfo(nint infoPtr, nint context)
-    {
-        var results = (List<FrameworkInfo>)GCHandle.FromIntPtr(context).Target!;
-        ref var info = ref Unsafe.AsRef<HostFxr.DotnetEnvironmentInfo>((void*)infoPtr);
-
-        for (nuint i = 0; i < info.FrameworkCount; i++)
-        {
-            ref var fw = ref Unsafe.Add(
-                ref Unsafe.AsRef<HostFxr.DotnetEnvironmentFrameworkInfo>((void*)info.Frameworks), (int)i);
-
-            string? name = HostFxr.PtrToString(fw.Name);
-            string? version = HostFxr.PtrToString(fw.Version);
-
-            if (name is not null && version is not null)
-                results.Add(new(name, version));
+            return [];
         }
     }
 
@@ -104,25 +65,22 @@ static unsafe class RuntimeCompat
     {
         try
         {
-            nint pathPtr = HostFxr.MarshalString(runtimeConfigPath);
-            bool resolved = false;
-            var handle = GCHandle.Alloc(new StrongBox<bool>(false));
+            if (!HostFxr.IsLoaded) return false;
 
+            // Use the low-level callback approach: hostfxr only invokes the callback
+            // when the config is valid and frameworks are resolved. Malformed JSON
+            // returns rc == 0 but skips the callback.
+            var gcHandle = GCHandle.Alloc(new StrongBox<bool>(false));
             try
             {
                 int rc = HostFxr.ResolveFrameworksForRuntimeConfig(
-                    pathPtr, 0, &OnResolveFrameworks, (nint)handle);
-
-                var box = (StrongBox<bool>)GCHandle.FromIntPtr((nint)handle).Target!;
-                resolved = rc == 0 && box.Value;
+                    runtimeConfigPath, 0, &OnResolveCheck, (nint)gcHandle);
+                return rc == 0 && ((StrongBox<bool>)gcHandle.Target!).Value;
             }
             finally
             {
-                HostFxr.FreeString(pathPtr);
-                handle.Free();
+                gcHandle.Free();
             }
-
-            return resolved;
         }
         catch
         {
@@ -131,10 +89,9 @@ static unsafe class RuntimeCompat
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    static void OnResolveFrameworks(nint resultPtr, nint context)
+    static void OnResolveCheck(nint resultPtr, nint context)
     {
-        var box = (StrongBox<bool>)GCHandle.FromIntPtr(context).Target!;
-        box.Value = true; // callback invoked = resolution succeeded
+        ((StrongBox<bool>)GCHandle.FromIntPtr(context).Target!).Value = true;
     }
 
     static bool TryResolveWithRollForward(string runtimeConfigPath)
@@ -210,7 +167,7 @@ static unsafe class RuntimeCompat
             var config = JsonSerializer.Deserialize(json, RuntimeConfigContext.Default.RuntimeConfig);
             var fw = config?.RuntimeOptions?.Framework;
             if (fw?.Name is not null && fw.Version is not null)
-                return new(fw.Name, fw.Version);
+                return new(fw.Name, fw.Version, "");
             return null;
         }
         catch
