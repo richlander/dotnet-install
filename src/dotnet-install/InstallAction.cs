@@ -46,12 +46,13 @@ static class InstallAction
             HelpWriter.WriteHelp(rootCommand);
 
             // PATH is in rc file but not active in this session (ephemeral shell)
-            if (!ShellConfig.IsOnPath(installDir))
+            if (!ShellConfig.IsOnPath(installDir) && !UserConfig.Read(installDir).TipQuiet)
             {
                 var config = ShellConfig.Detect(installDir);
                 Console.WriteLine();
                 Console.WriteLine($"tip: {config.DisplayDir} is not in this shell's PATH.");
                 Console.WriteLine($"     Run: source {config.RcFile}");
+                Console.WriteLine($"     To silence: dotnet-install config tip.quiet true");
             }
 
             return 0;
