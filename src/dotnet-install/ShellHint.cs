@@ -73,6 +73,22 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
                content.Contains(DisplayDir);
     }
 
+    /// <summary>
+    /// Check if the install dir is configured in the rc file but not yet active in
+    /// the current shell (e.g. ephemeral shells, CI containers, unsourced sessions).
+    /// </summary>
+    public static bool IsConfiguredButNotActive(string installDir)
+    {
+        if (OperatingSystem.IsWindows())
+            return false;
+
+        if (IsOnPath(installDir))
+            return false;
+
+        var config = Detect(installDir);
+        return config.RcFileContainsPath();
+    }
+
     static string GetBashRcFile()
     {
         if (OperatingSystem.IsMacOS())
