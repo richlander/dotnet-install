@@ -36,13 +36,24 @@ static class InstallAction
         // No positional args — run setup if needed, otherwise show help
         if (projectArgs.Length == 0)
         {
-            if (!ShellConfig.IsOnPath(installDir))
+            // PATH not configured at all — run doctor to set up
+            if (!ShellConfig.IsOnPath(installDir) && !ShellConfig.IsConfiguredButNotActive(installDir))
             {
                 return await DoctorCommand.Run(installDir, fix: true);
             }
 
             var rootCommand = CommandLineBuilder.CreateRootCommand();
             HelpWriter.WriteHelp(rootCommand);
+
+            // PATH is in rc file but not active in this session (ephemeral shell)
+            if (!ShellConfig.IsOnPath(installDir))
+            {
+                var config = ShellConfig.Detect(installDir);
+                Console.WriteLine();
+                Console.WriteLine($"tip: {config.DisplayDir} is not in this shell's PATH.");
+                Console.WriteLine($"     Run: source {config.RcFile}");
+            }
+
             return 0;
         }
 
