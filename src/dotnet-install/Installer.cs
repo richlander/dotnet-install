@@ -342,7 +342,7 @@ static class Installer
     /// Resolves the RID-specific package ID from a pointer package's DotnetToolSettings.xml.
     /// Returns null if the package is not a pointer package (i.e., contains tools directly).
     /// </summary>
-    static string? FindRidSpecificPackage(string extractPath)
+    internal static string? FindRidSpecificPackage(string extractPath)
     {
         string rid = RuntimeInformation.RuntimeIdentifier;
         var ridFallbacks = GetRidFallbacks(rid);
