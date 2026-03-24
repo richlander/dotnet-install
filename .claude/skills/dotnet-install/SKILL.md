@@ -36,7 +36,8 @@ to `~/.dotnet/bin/` and sheds the dotnet tool scaffolding.
 | `~/.dotnet/bin/`     | `dotnet-install`         | Real binaries, flat layout |
 
 `dotnet-install` itself lives at `~/.dotnet/bin/dotnet-install`.
-The env var `DOTNET_TOOL_BIN` points here.
+Override with `DOTNET_TOOL_BIN` env var, `-o`, or
+`--local-bin` (`~/.local/bin/`).
 
 ## Invoking the tool
 
@@ -148,14 +149,25 @@ dotnet install completion        # shell completion setup
 
 ## Key design decisions
 
+### Install & layout
+
 - **Install directory**: `~/.dotnet/bin/`
-  (NOT `~/.dotnet/tools/` — this is a separate store)
-  Configurable with `-o`, `--local-bin` (`~/.local/bin/`),
-  or `DOTNET_TOOL_BIN` env var
-- **Environment variable**: `DOTNET_TOOL_BIN` overrides
-  the default install directory (like `GOBIN`)
-- **Prompting**: bare positional args prompt to confirm
-  remote sources (NuGet/GitHub); explicit flags
+  (NOT `~/.dotnet/tools/` — this is a separate store).
+  `DOTNET_TOOL_BIN` overrides, like `GOBIN`
+- **Single-file binaries** (Native AOT):
+  copied directly to install dir
+- **Multi-file binaries**: stored in `_<appname>/`
+  subdirectory with a symlink (Unix) or
+  `.cmd` shim (Windows) — busybox dispatch pattern
+- **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
+  — persistent clone, `git fetch` on re-install
+- **Cross-platform**: Unix uses symlinks and `chmod`;
+  Windows uses `.cmd` shims and `.exe` detection
+
+### UX & prompting
+
+- **Bare vs explicit**: bare positional args prompt to
+  confirm remote sources (NuGet/GitHub); explicit flags
   (`--package`, `--github`) skip all prompts
 - **Roll-forward**: remote installs (NuGet) auto-enable
   roll-forward with a message; local installs prompt
@@ -163,27 +175,18 @@ dotnet install completion        # shell completion setup
 - **SDK preflight**: building from source checks for the
   .NET SDK before attempting `dotnet publish` and
   suggests `--package` as the SDK-free alternative
-- **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
-  — persistent clone, `git fetch` on re-install
-- **Single-file binaries** (Native AOT):
-  copied directly to install dir
-- **Multi-file binaries**: stored in `_<appname>/`
-  subdirectory with a symlink (Unix) or
-  `.cmd` shim (Windows) — busybox dispatch pattern
-- **Project discovery for git repos**: `--project`
+- **Bootstrap graduation**: when installed via
+  `dotnet tool install -g`, `setup` self-installs
+  from NuGet and sheds the dotnet tool scaffolding
+
+### Project discovery
+
+- **Source resolution for git repos**: `--project`
   flag > `.dotnet-install.json` manifest >
   auto-detect Exe projects > file-based apps.
   Multiple projects trigger interactive selector (≤12)
 - **File-based apps**: `.cs` files with `#:property`
   directives are detected and published directly
-- **Bootstrap graduation**: when installed via
-  `dotnet tool install -g`, `setup` self-installs
-  from NuGet and sheds the dotnet tool scaffolding
-- **Source flags**: `--github`, `--package`, and
-  local path are explicit; bare `owner/repo`
-  triggers a confirmation prompt
-- **Cross-platform**: Unix uses symlinks and `chmod`;
-  Windows uses `.cmd` shims and `.exe` detection
 
 ## When building or running the tool
 
