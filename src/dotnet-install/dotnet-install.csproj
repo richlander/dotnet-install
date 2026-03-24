@@ -31,6 +31,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="skill.md" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="dotnet-install.Tests" />
   </ItemGroup>
 

@@ -274,6 +274,12 @@ static class CommandLineBuilder
             return Task.FromResult(0);
         });
 
+        var skillCommand = new Command("skill", "Print the AI skill definition for this tool");
+        skillCommand.SetAction((parseResult, ct) =>
+        {
+            return Task.FromResult(SkillCommand.Run());
+        });
+
         rootCommand.Subcommands.Add(doctorCommand);
         rootCommand.Subcommands.Add(configCommand);
         rootCommand.Subcommands.Add(listCommand);
@@ -286,6 +292,7 @@ static class CommandLineBuilder
         rootCommand.Subcommands.Add(runCommand);
         rootCommand.Subcommands.Add(completionCommand);
         rootCommand.Subcommands.Add(envCommand);
+        rootCommand.Subcommands.Add(skillCommand);
 
         // --- Default install action ---
 
