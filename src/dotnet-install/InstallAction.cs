@@ -59,11 +59,10 @@ static class InstallAction
         }
 
         // Multiple args — install each one (skip prompts when multiple specified)
-        bool skipPrompt = projectArgs.Length > 1;
         int failures = 0;
         foreach (string arg in projectArgs)
         {
-            int result = await InstallOneAsync(arg, installDir, useSsh, projectPath, allowRollForward, requireSourceLink, skipPrompt);
+            int result = await InstallOneAsync(arg, installDir, useSsh, projectPath, allowRollForward, requireSourceLink);
             if (result != 0)
                 failures++;
         }
@@ -76,11 +75,14 @@ static class InstallAction
 
     static async Task<int> InstallOneAsync(
         string projectArg, string installDir, bool useSsh,
-        string? projectPath, bool allowRollForward, bool requireSourceLink, bool skipPrompt = false)
+        string? projectPath, bool allowRollForward, bool requireSourceLink)
     {
         // Local path
         if (Directory.Exists(projectArg) || File.Exists(projectArg))
         {
+            if (!CheckPrereqs(dotnet: true))
+                return 1;
+
             string? projectFile = FindProjectFile(projectArg);
             if (projectFile is null)
             {
@@ -93,57 +95,62 @@ static class InstallAction
         // owner/repo pattern
         if (projectArg.Contains('/'))
         {
-            if (!skipPrompt)
-            {
-                string url = useSsh
-                    ? $"git@github.com:{projectArg.Split('@')[0]}.git"
-                    : $"https://github.com/{projectArg.Split('@')[0]}";
+            string ownerRepo = projectArg.Split('@')[0];
+            string url = useSsh
+                ? $"git@github.com:{ownerRepo}.git"
+                : $"https://github.com/{ownerRepo}";
 
-                if (!Console.IsInputRedirected)
-                {
-                    Console.Write($"'{projectArg}' is not a local path. Clone from {url}? [Y/n] ");
-                    var key = Console.ReadKey(intercept: true);
-                    Console.WriteLine();
-
-                    if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
-                    {
-                        Console.WriteLine("Cancelled.");
-                        return 1;
-                    }
-                }
-                else
-                {
-                    Console.Error.WriteLine($"'{projectArg}' is not a local path. Use --github to install from GitHub in non-interactive mode.");
-                    return 1;
-                }
-            }
+            if (!CheckPrereqs(git: true, dotnet: true, context: url))
+                return 1;
 
             return GitSource.InstallFromGit(projectArg, installDir, useSsh, projectPath, requireSourceLink);
         }
 
         // Bare name — treat as NuGet package
-        if (!skipPrompt)
-        {
-            if (!Console.IsInputRedirected)
-            {
-                Console.Write($"'{projectArg}' is not a local path. Install from NuGet? [Y/n] ");
-                var key = Console.ReadKey(intercept: true);
-                Console.WriteLine();
+        return await Installer.InstallPackageAsync(projectArg, installDir, allowRollForward, requireSourceLink);
+    }
 
-                if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
-                {
-                    Console.WriteLine("Cancelled.");
-                    return 1;
-                }
-            }
-            else
+    static bool CheckPrereqs(bool git = false, bool dotnet = false, string? context = null)
+    {
+        List<string> missing = [];
+
+        if (git && !IsAvailable("git"))
+            missing.Add("git");
+
+        if (dotnet && !IsAvailable("dotnet"))
+            missing.Add(".NET SDK (https://dot.net/download)");
+
+        if (missing.Count == 0)
+            return true;
+
+        if (context is not null)
+            Console.Error.WriteLine($"Found: {context}");
+
+        Console.Error.WriteLine("Prereqs missing:");
+        foreach (string m in missing)
+            Console.Error.WriteLine($"  - {m}");
+
+        return false;
+
+        static bool IsAvailable(string command)
+        {
+            try
             {
-                Console.Error.WriteLine($"'{projectArg}' is not a local path. Use --package to install from NuGet in non-interactive mode.");
-                return 1;
+                using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(command)
+                {
+                    ArgumentList = { "--version" },
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                });
+                p?.WaitForExit();
+                return p is not null && p.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
             }
         }
-
-        return await Installer.InstallPackageAsync(projectArg, installDir, allowRollForward, requireSourceLink);
     }
 
     static InstallSource CreateLocalSource(string projectFile)
