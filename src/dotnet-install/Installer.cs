@@ -665,6 +665,36 @@ static class Installer
 
     static bool Publish(string projectFile, string outputDir, bool selfContained = true)
     {
+        // Preflight: check that the .NET SDK is available
+        try
+        {
+            var check = new ProcessStartInfo("dotnet")
+            {
+                ArgumentList = { "--version" },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            using var probe = Process.Start(check);
+            probe?.WaitForExit();
+            if (probe is null || probe.ExitCode != 0)
+            {
+                Console.Error.WriteLine("error: .NET SDK not found. Building from source requires the SDK.");
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("To install the SDK: https://dot.net/download");
+                Console.Error.WriteLine("To install a pre-built tool instead: dotnet-install --package <name>");
+                return false;
+            }
+        }
+        catch
+        {
+            Console.Error.WriteLine("error: .NET SDK not found. Building from source requires the SDK.");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("To install the SDK: https://dot.net/download");
+            Console.Error.WriteLine("To install a pre-built tool instead: dotnet-install --package <name>");
+            return false;
+        }
+
         string fullProjectPath = Path.GetFullPath(projectFile);
         string projectDir = Path.GetDirectoryName(fullProjectPath)!;
         string rid = RuntimeInformation.RuntimeIdentifier;
