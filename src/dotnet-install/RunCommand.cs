@@ -79,6 +79,13 @@ static class RunCommand
 
         try
         {
+            // Check if this is a pointer package with RID-specific satellite packages
+            string? ridPackageId = Installer.FindRidSpecificPackage(extractPath);
+            if (ridPackageId is not null)
+            {
+                return await RunAsync($"{ridPackageId}@{version}", toolArgs, allowRollForward);
+            }
+
             return RunFromExtracted(extractPath, packageName, toolArgs, allowRollForward);
         }
         finally
