@@ -82,6 +82,8 @@ The tool lives at `src/dotnet-install/` in this repo:
 - `OutdatedCommand.cs` — Check for newer versions
 - `RunCommand.cs` — Run without installing (npx-like)
 - `CompletionCommand.cs` — Shell completion setup
+- `SkillCommand.cs` — Prints embedded skill definition
+- `skill.md` — Embedded skill for AI assistants (end-user)
 - `HelpWriter.cs` — Markout-based help formatting
 
 ## Three install modes
