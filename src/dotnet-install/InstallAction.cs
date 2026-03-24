@@ -112,23 +112,29 @@ static class InstallAction
 
     static bool CheckPrereqs(bool git = false, bool dotnet = false, string? context = null)
     {
-        List<string> missing = [];
+        bool missingGit = git && !IsAvailable("git");
+        bool missingDotnet = dotnet && !IsAvailable("dotnet");
 
-        if (git && !IsAvailable("git"))
-            missing.Add("git");
-
-        if (dotnet && !IsAvailable("dotnet"))
-            missing.Add(".NET SDK (https://dot.net/download)");
-
-        if (missing.Count == 0)
+        if (!missingGit && !missingDotnet)
             return true;
 
         if (context is not null)
             Console.Error.WriteLine($"Found: {context}");
 
-        Console.Error.WriteLine("Prereqs missing:");
-        foreach (string m in missing)
-            Console.Error.WriteLine($"  - {m}");
+        if (missingGit && missingDotnet)
+            Console.Error.WriteLine("error: git and .NET SDK are not installed.");
+        else if (missingGit)
+            Console.Error.WriteLine("error: git is not installed.");
+        else
+            Console.Error.WriteLine("error: .NET SDK is not installed.");
+
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("To resolve this:");
+
+        if (missingGit)
+            Console.Error.WriteLine("  Install git: https://git-scm.com");
+        if (missingDotnet)
+            Console.Error.WriteLine("  Install .NET SDK: https://dot.net/download");
 
         return false;
 

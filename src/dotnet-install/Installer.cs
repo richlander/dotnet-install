@@ -190,33 +190,33 @@ static class Installer
             }
         }
 
-        // Verify signature from extracted .signature.p7s (works for both fresh and cached)
-        string sigPath = Path.Combine(extractPath, ".signature.p7s");
-        if (File.Exists(sigPath))
-        {
-            var sigResult = PackageSignatureVerifier.VerifySignatureFile(sigPath);
-            switch (sigResult.Status)
-            {
-                case SignatureStatus.Valid:
-                    if (!quiet) PrintSignature(sigResult);
-                    break;
-                case SignatureStatus.Unsigned:
-                    Console.Error.WriteLine("warning: package is not signed");
-                    break;
-                case SignatureStatus.Invalid:
-                    Console.Error.WriteLine($"error: package signature verification failed: {sigResult.Reason}");
-                    return 1;
-            }
-        }
-
         try
         {
             // Check if this is a pointer package with RID-specific satellite packages
             string? ridPackageId = FindRidSpecificPackage(extractPath);
             if (ridPackageId is not null)
             {
-                // Redirect to the RID-specific package
+                // Redirect — the RID-specific package prints its own verification
                 return await InstallPackageAsync($"{ridPackageId}@{version}", installDir, allowRollForward, requireSourceLink);
+            }
+
+            // Verify signature from extracted .signature.p7s
+            string sigPath = Path.Combine(extractPath, ".signature.p7s");
+            if (File.Exists(sigPath))
+            {
+                var sigResult = PackageSignatureVerifier.VerifySignatureFile(sigPath);
+                switch (sigResult.Status)
+                {
+                    case SignatureStatus.Valid:
+                        if (!quiet) PrintSignature(sigResult);
+                        break;
+                    case SignatureStatus.Unsigned:
+                        Console.Error.WriteLine("warning: package is not signed");
+                        break;
+                    case SignatureStatus.Invalid:
+                        Console.Error.WriteLine($"error: package signature verification failed: {sigResult.Reason}");
+                        return 1;
+                }
             }
 
             // Find the tool's entry point via DotnetToolSettings.xml
