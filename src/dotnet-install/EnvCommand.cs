@@ -7,7 +7,7 @@ static class EnvCommand
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-        // DOTNET_INSTALL_HOME
+        // DOTNET_TOOL_BIN
         string? envHome = Environment.GetEnvironmentVariable(ShellConfig.EnvVar);
         string effectiveHome = envHome ?? installDir;
 

@@ -10,7 +10,7 @@
 
 set -eu
 
-INSTALL_DIR="${DOTNET_INSTALL_DIR:-$HOME/.dotnet/bin}"
+INSTALL_DIR="${DOTNET_TOOL_BIN:-$HOME/.dotnet/bin}"
 
 main() {
     need_cmd dotnet

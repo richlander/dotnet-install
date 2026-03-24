@@ -5,8 +5,16 @@ using NuGetFetch;
 
 static class Installer
 {
-    public static string DefaultInstallDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "bin");
+    public static string DefaultInstallDir
+    {
+        get
+        {
+            string? envDir = Environment.GetEnvironmentVariable(ShellConfig.EnvVar);
+            if (!string.IsNullOrEmpty(envDir))
+                return envDir;
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "bin");
+        }
+    }
 
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
