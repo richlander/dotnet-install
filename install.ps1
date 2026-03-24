@@ -7,7 +7,7 @@
 #
 # Environment variables:
 #   DOTNET_INSTALL_FEED  Override the download base URL
-#   DOTNET_INSTALL_DIR   Override the install directory
+#   DOTNET_TOOL_BIN      Override the install directory
 
 $ErrorActionPreference = "Stop"
 
@@ -17,8 +17,8 @@ $feed = if ($env:DOTNET_INSTALL_FEED) {
     "https://github.com/richlander/dotnet-install/releases/download"
 }
 
-$installDir = if ($env:DOTNET_INSTALL_DIR) {
-    $env:DOTNET_INSTALL_DIR
+$installDir = if ($env:DOTNET_TOOL_BIN) {
+    $env:DOTNET_TOOL_BIN
 } else {
     Join-Path $HOME ".dotnet" "bin"
 }

@@ -9,7 +9,7 @@
 # Requires the .NET SDK.
 #
 # Environment variables:
-#   DOTNET_INSTALL_DIR   Override the install directory
+#   DOTNET_TOOL_BIN      Override the install directory
 
 set -eu
 

@@ -3,7 +3,7 @@
 /// </summary>
 record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, string ExportLine, string EnvLine, string DisplayDir)
 {
-    public const string EnvVar = "DOTNET_INSTALL_HOME";
+    public const string EnvVar = "DOTNET_TOOL_BIN";
 
     public static bool IsOnPath(string dir)
     {

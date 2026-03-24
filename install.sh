@@ -10,12 +10,12 @@
 #
 # Environment variables:
 #   DOTNET_INSTALL_FEED  Override the download base URL
-#   DOTNET_INSTALL_DIR   Override the install directory
+#   DOTNET_TOOL_BIN      Override the install directory
 
 set -u
 
 FEED="${DOTNET_INSTALL_FEED:-https://github.com/richlander/dotnet-install/releases/download}"
-INSTALL_DIR="${DOTNET_INSTALL_DIR:-$HOME/.dotnet/bin}"
+INSTALL_DIR="${DOTNET_TOOL_BIN:-$HOME/.dotnet/bin}"
 
 main() {
     downloader --check

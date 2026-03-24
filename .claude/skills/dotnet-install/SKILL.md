@@ -36,7 +36,7 @@ to `~/.dotnet/bin/` and sheds the dotnet tool scaffolding.
 | `~/.dotnet/bin/`     | `dotnet-install`         | Real binaries, flat layout |
 
 `dotnet-install` itself lives at `~/.dotnet/bin/dotnet-install`.
-The env var `DOTNET_INSTALL_HOME` points here.
+The env var `DOTNET_TOOL_BIN` points here.
 
 ## Invoking the tool
 
@@ -65,7 +65,7 @@ The tool lives at `src/dotnet-install/` in this repo:
 - `GitSource.cs` — Git clone/fetch from GitHub repos,
   project discovery, `.dotnet-install.json` manifest
 - `ShellHint.cs` — PATH detection, shell-specific
-  setup instructions, `DOTNET_INSTALL_HOME` env var
+  setup instructions, `DOTNET_TOOL_BIN` env var
 - `SetupCommand.cs` — Shell PATH config, self-install
   from NuGet (bootstrap graduation), shed dotnet tool
 - `EnvCommand.cs` — Print environment info (`cargo env` style)
@@ -141,7 +141,7 @@ dotnet install search <query>    # search NuGet
 dotnet install info <tool>       # show tool details
 dotnet install outdated          # check for newer versions
 dotnet install run <pkg> [args]  # run without installing (npx-like)
-dotnet install setup             # configure PATH + DOTNET_INSTALL_HOME
+dotnet install setup             # configure PATH + DOTNET_TOOL_BIN
 dotnet install env               # print environment info
 dotnet install completion        # shell completion setup
 ```
@@ -151,7 +151,7 @@ dotnet install completion        # shell completion setup
 - **Install directory**: `~/.dotnet/bin/`
   (NOT `~/.dotnet/tools/` — this is a separate store)
   Configurable with `-o` or `--local-bin` (`~/.local/bin/`)
-- **Environment variable**: `DOTNET_INSTALL_HOME` points
+- **Environment variable**: `DOTNET_TOOL_BIN` points
   to the install directory (like `CARGO_HOME`/`GOPATH`)
 - **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
   — persistent clone, `git fetch` on re-install
