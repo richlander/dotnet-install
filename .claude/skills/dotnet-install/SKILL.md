@@ -147,46 +147,17 @@ dotnet install env               # print environment info
 dotnet install completion        # shell completion setup
 ```
 
-## Key design decisions
-
-### Install & layout
-
-- **Install directory**: `~/.dotnet/bin/`
-  (NOT `~/.dotnet/tools/` — this is a separate store).
-  `DOTNET_TOOL_BIN` overrides, like `GOBIN`
-- **Single-file binaries** (Native AOT):
-  copied directly to install dir
-- **Multi-file binaries**: stored in `_<appname>/`
-  subdirectory with a symlink (Unix) or
-  `.cmd` shim (Windows) — busybox dispatch pattern
-- **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
-  — persistent clone, `git fetch` on re-install
-- **Cross-platform**: Unix uses symlinks and `chmod`;
-  Windows uses `.cmd` shims and `.exe` detection
-
-### UX & prompting
+## Behavior
 
 - **Bare vs explicit**: bare positional args prompt to
   confirm remote sources (NuGet/GitHub); explicit flags
   (`--package`, `--github`) skip all prompts
 - **Roll-forward**: remote installs (NuGet) auto-enable
-  roll-forward with a message; local installs prompt
-  the user (`--allow-roll-forward` suppresses)
+  roll-forward; local installs prompt the user
+  (`--allow-roll-forward` suppresses)
 - **SDK preflight**: building from source checks for the
-  .NET SDK before attempting `dotnet publish` and
-  suggests `--package` as the SDK-free alternative
-- **Bootstrap graduation**: when installed via
-  `dotnet tool install -g`, `setup` self-installs
-  from NuGet and sheds the dotnet tool scaffolding
-
-### Project discovery
-
-- **Source resolution for git repos**: `--project`
-  flag > `.dotnet-install.json` manifest >
-  auto-detect Exe projects > file-based apps.
-  Multiple projects trigger interactive selector (≤12)
-- **File-based apps**: `.cs` files with `#:property`
-  directives are detected and published directly
+  .NET SDK before `dotnet publish` and suggests
+  `--package` as the SDK-free alternative
 
 ## When building or running the tool
 
@@ -213,4 +184,11 @@ dotnet run --project test/dotnet-install.Tests
   `GitSource.cs`)
 - Error messages: `"error: <message>"` to stderr
 - Status messages to stdout
+- Single-file (AOT) binaries go directly in install dir;
+  multi-file (managed) go in `_<appname>/` with a
+  symlink (Unix) or `.cmd` shim (Windows)
+- Git repos cached at `~/.nuget/git-tools/<owner>/<repo>/`
+- Project discovery order: `--project` > manifest >
+  auto-detect Exe > file-based apps (≤12 → selector)
+- See `DESIGN.md` for full architecture rationale
 - Test with all three install modes and subcommands
