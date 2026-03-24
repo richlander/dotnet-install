@@ -282,27 +282,10 @@ static class Installer
                         {
                             if (compat.RollForwardWouldHelp && !allowRollForward)
                             {
-                                if (Console.IsInputRedirected)
-                                {
-                                    Console.Error.WriteLine($"error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
-                                    Console.Error.WriteLine();
-                                    Console.Error.WriteLine("This can be resolved by:");
-                                    Console.Error.WriteLine($"  dotnet install --package {packageSpec} --allow-roll-forward");
-                                    Console.Error.WriteLine($"  Install .NET {compat.RequiredVersion}: https://dot.net/download");
-                                    return 1;
-                                }
-
-                                Console.Write($"{commandName} requires .NET {compat.RequiredVersion} (not installed). Enable roll-forward? [Y/n] ");
-                                string? answer = Console.ReadLine()?.Trim();
-                                if (answer is null or "" or "y" or "Y" or "yes" or "Yes")
-                                {
-                                    allowRollForward = true;
-                                }
-                                else
-                                {
-                                    Console.WriteLine("Cancelled.");
-                                    return 1;
-                                }
+                                // Remote packages auto-enable roll-forward
+                                allowRollForward = true;
+                                if (!quiet)
+                                    Console.WriteLine($"Enabled roll-forward ({commandName} requires .NET {compat.RequiredVersion})");
                             }
 
                             if (!compat.RollForwardWouldHelp)
