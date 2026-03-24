@@ -2,38 +2,61 @@
 
 Install .NET executables to PATH — like `cargo install` and `go install`.
 
+Built with .NET, AOT-compiled, no runtime required.
+
 ```bash
 dotnet-install .                              # Build & install current project
 dotnet-install --package dotnetsay            # Install from NuGet
-dotnet-install --github nichlander/my-tool    # Install from GitHub
+dotnet-install --github richlander/my-tool    # Install from GitHub
 ```
+
+## Why not `dotnet tool install`?
+
+`dotnet tool install` requires the SDK, only installs from NuGet, and every
+tool runs as a managed DLL under `dotnet exec`.
+
+dotnet-install goes further:
+
+- **No .NET required** — install and run Native AOT tools
+  without the SDK or runtime
+- **Uses the SDK if available** — build and install directly
+  from local projects and GitHub repos
+- **Update everything** — `dotnet-install update` checks all
+  installed tools at once, like `npm update`
+- **Just run it** — installed tools are on PATH; no `dotnet run`
+  needed to find the executable
+- **Clean release build** — always does a publish-optimized build,
+  just like `cargo install` and `go install`
+- **Run without installing** — `dotnet-install run dotnetsay`
+  executes a NuGet tool directly, like `dnx`
+- **Roll-forward at install** — prompts once if the tool needs
+  a newer runtime, instead of failing on first run
+- **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
+  not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
 
 ## Install
 
-### SDK users
+No .NET required — downloads a self-contained native binary.
 
-```bash
-dotnet tool install -g dotnet-install
-dotnet-install setup
-```
-
-### Without the SDK
-
-Unix:
+**Linux / macOS:**
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSfL \
   https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
 ```
 
-Windows (PowerShell):
+**Windows (PowerShell):**
 
 ```powershell
 irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1 | iex
 ```
 
-These scripts download a platform-specific binary and run
-`dotnet-install setup` to configure your shell. No .NET SDK required.
+### Already have the SDK?
+
+```bash
+dotnet tool install -g dotnet-install
+dotnet-install setup
+```
 
 ### From source
 
