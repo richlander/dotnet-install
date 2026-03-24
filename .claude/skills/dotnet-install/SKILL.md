@@ -150,9 +150,19 @@ dotnet install completion        # shell completion setup
 
 - **Install directory**: `~/.dotnet/bin/`
   (NOT `~/.dotnet/tools/` — this is a separate store)
-  Configurable with `-o` or `--local-bin` (`~/.local/bin/`)
-- **Environment variable**: `DOTNET_TOOL_BIN` points
-  to the install directory (like `CARGO_HOME`/`GOPATH`)
+  Configurable with `-o`, `--local-bin` (`~/.local/bin/`),
+  or `DOTNET_TOOL_BIN` env var
+- **Environment variable**: `DOTNET_TOOL_BIN` overrides
+  the default install directory (like `GOBIN`)
+- **Prompting**: bare positional args prompt to confirm
+  remote sources (NuGet/GitHub); explicit flags
+  (`--package`, `--github`) skip all prompts
+- **Roll-forward**: remote installs (NuGet) auto-enable
+  roll-forward with a message; local installs prompt
+  the user (`--allow-roll-forward` suppresses)
+- **SDK preflight**: building from source checks for the
+  .NET SDK before attempting `dotnet publish` and
+  suggests `--package` as the SDK-free alternative
 - **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
   — persistent clone, `git fetch` on re-install
 - **Single-file binaries** (Native AOT):
