@@ -36,7 +36,8 @@ to `~/.dotnet/bin/` and sheds the dotnet tool scaffolding.
 | `~/.dotnet/bin/`     | `dotnet-install`         | Real binaries, flat layout |
 
 `dotnet-install` itself lives at `~/.dotnet/bin/dotnet-install`.
-The env var `DOTNET_TOOL_BIN` points here.
+Override with `DOTNET_TOOL_BIN` env var, `-o`, or
+`--local-bin` (`~/.local/bin/`).
 
 ## Invoking the tool
 
@@ -146,34 +147,17 @@ dotnet install env               # print environment info
 dotnet install completion        # shell completion setup
 ```
 
-## Key design decisions
+## Behavior
 
-- **Install directory**: `~/.dotnet/bin/`
-  (NOT `~/.dotnet/tools/` — this is a separate store)
-  Configurable with `-o` or `--local-bin` (`~/.local/bin/`)
-- **Environment variable**: `DOTNET_TOOL_BIN` points
-  to the install directory (like `CARGO_HOME`/`GOPATH`)
-- **Git cache**: `~/.nuget/git-tools/<owner>/<repo>/`
-  — persistent clone, `git fetch` on re-install
-- **Single-file binaries** (Native AOT):
-  copied directly to install dir
-- **Multi-file binaries**: stored in `_<appname>/`
-  subdirectory with a symlink (Unix) or
-  `.cmd` shim (Windows) — busybox dispatch pattern
-- **Project discovery for git repos**: `--project`
-  flag > `.dotnet-install.json` manifest >
-  auto-detect Exe projects > file-based apps.
-  Multiple projects trigger interactive selector (≤12)
-- **File-based apps**: `.cs` files with `#:property`
-  directives are detected and published directly
-- **Bootstrap graduation**: when installed via
-  `dotnet tool install -g`, `setup` self-installs
-  from NuGet and sheds the dotnet tool scaffolding
-- **Source flags**: `--github`, `--package`, and
-  local path are explicit; bare `owner/repo`
-  triggers a confirmation prompt
-- **Cross-platform**: Unix uses symlinks and `chmod`;
-  Windows uses `.cmd` shims and `.exe` detection
+- **Bare vs explicit**: bare positional args prompt to
+  confirm remote sources (NuGet/GitHub); explicit flags
+  (`--package`, `--github`) skip all prompts
+- **Roll-forward**: remote installs (NuGet) auto-enable
+  roll-forward; local installs prompt the user
+  (`--allow-roll-forward` suppresses)
+- **SDK preflight**: building from source checks for the
+  .NET SDK before `dotnet publish` and suggests
+  `--package` as the SDK-free alternative
 
 ## When building or running the tool
 
@@ -200,4 +184,11 @@ dotnet run --project test/dotnet-install.Tests
   `GitSource.cs`)
 - Error messages: `"error: <message>"` to stderr
 - Status messages to stdout
+- Single-file (AOT) binaries go directly in install dir;
+  multi-file (managed) go in `_<appname>/` with a
+  symlink (Unix) or `.cmd` shim (Windows)
+- Git repos cached at `~/.nuget/git-tools/<owner>/<repo>/`
+- Project discovery order: `--project` > manifest >
+  auto-detect Exe > file-based apps (≤12 → selector)
+- See `DESIGN.md` for full architecture rationale
 - Test with all three install modes and subcommands
