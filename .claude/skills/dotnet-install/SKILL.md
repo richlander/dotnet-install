@@ -179,7 +179,7 @@ dotnet run --project test/dotnet-install.Tests
 - CLI is built with System.CommandLine — commands and
   options defined in `CommandLineBuilder.cs`
 - Help output uses Markout serialization (`HelpWriter.cs`)
-- The project targets `net11.0` with
+- The project targets `net10.0` with
   `PublishAot=true` — all code must be AOT-compatible
 - Use STJ source generation for any JSON
   serialization (see `ManifestContext` in

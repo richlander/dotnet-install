@@ -82,6 +82,7 @@ jobs:
             rid: win-x64
           - os: windows-latest
             rid: win-arm64
+            cross: true
           - os: macos-latest
             rid: osx-arm64
     runs-on: ${{ matrix.os }}
@@ -99,24 +100,25 @@ jobs:
       - name: Build
         run: dotnet build dotnet-install/src/dotnet-install -c Release
 
-      - name: Smoke test
-        run: |
-          dotnet run --project dotnet-install/src/dotnet-install -c Release -- --version
-          dotnet run --project dotnet-install/src/dotnet-install -c Release -- --help
-
       - name: Publish NativeAOT
-        run: dotnet publish dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }}
+        run: dotnet publish dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }} -f net11.0
+
+      - name: Smoke test
+        if: ${{ !matrix.cross }}
+        run: |
+          dotnet-install/artifacts/publish/dotnet-install/release_net11.0_${{ matrix.rid }}/dotnet-install${{ runner.os == 'Windows' && '.exe' || '' }} --version
+          dotnet-install/artifacts/publish/dotnet-install/release_net11.0_${{ matrix.rid }}/dotnet-install${{ runner.os == 'Windows' && '.exe' || '' }} --help
 
       - name: Package binary (tar.gz)
         if: runner.os != 'Windows'
         run: |
-          cd dotnet-install/artifacts/publish/dotnet-install/release_${{ matrix.rid }}
+          cd dotnet-install/artifacts/publish/dotnet-install/release_net11.0_${{ matrix.rid }}
           tar -czf "$GITHUB_WORKSPACE/dotnet-install-${{ matrix.rid }}.tar.gz" dotnet-install
 
       - name: Package binary (zip)
         if: runner.os == 'Windows'
         run: |
-          cd dotnet-install/artifacts/publish/dotnet-install/release_${{ matrix.rid }}
+          cd dotnet-install/artifacts/publish/dotnet-install/release_net11.0_${{ matrix.rid }}
           Compress-Archive -Path dotnet-install.exe -DestinationPath "$env:GITHUB_WORKSPACE/dotnet-install-${{ matrix.rid }}.zip"
         shell: pwsh
 
@@ -162,7 +164,7 @@ jobs:
           if-no-files-found: error
 
       - name: Pack linux-x64 AOT package
-        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r linux-x64 -p:OfficialAotBuild=true
+        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r linux-x64 -p:TargetFrameworks=net11.0 -p:OfficialAotBuild=true
 
       - name: Upload linux-x64 package
         uses: actions/upload-artifact@v7
@@ -199,7 +201,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Pack RID-specific package
-        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }} -p:OfficialAotBuild=true
+        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }} -p:TargetFrameworks=net11.0 -p:OfficialAotBuild=true
 
       - name: Upload RID package
         uses: actions/upload-artifact@v7
