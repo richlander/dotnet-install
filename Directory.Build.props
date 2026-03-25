@@ -7,6 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsAotCompatible>true</IsAotCompatible>
     <EnablePreviewFeatures>true</EnablePreviewFeatures>
+    <NoWarn>$(NoWarn);SYSLIB5007;CA2252</NoWarn>
     <Features>$(Features);runtime-async=on</Features>
   </PropertyGroup>
 
