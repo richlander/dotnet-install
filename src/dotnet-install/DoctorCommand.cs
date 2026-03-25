@@ -19,11 +19,7 @@ static class DoctorCommand
 
         if (fix && isBootstrap)
         {
-            Console.WriteLine("dotnet-install needs to be re-installed to " +
-                $"{DisplayPath(installDir)}.");
-            Console.WriteLine("The dotnet global tool bootstrap is temporary " +
-                "— this is a one-time setup.");
-            Console.WriteLine();
+            Console.WriteLine("Setting up dotnet-install (one-time)...");
         }
 
         // Step 1: Ensure dotnet-install binary is in the install directory
@@ -81,10 +77,9 @@ static class DoctorCommand
             return 1;
         }
 
-        Console.WriteLine($"Installing dotnet-install to {DisplayPath(installDir)}...");
         int result = await Installer.InstallPackageAsync("dotnet-install", installDir, quiet: true);
         if (result == 0)
-            Console.WriteLine($"✔ Installed dotnet-install");
+            Console.WriteLine($"✔ Installed to {DisplayPath(installDir)}");
         else
             Console.WriteLine($"⚠ Failed to install dotnet-install");
         return result == 0 ? 0 : 1;
@@ -108,7 +103,9 @@ static class DoctorCommand
         if (shellConfig.RcFile is not null && shellConfig.RcFileContainsPath())
         {
             Console.WriteLine();
-            Console.WriteLine($"Restart your shell or run: source {shellConfig.RcFile}");
+            Console.WriteLine($"Run the following command:");
+            Console.WriteLine();
+            Console.WriteLine($"source {shellConfig.RcFile}");
             return 0;
         }
 
@@ -139,7 +136,7 @@ static class DoctorCommand
             return 0;
         }
 
-        Console.Write($"Add to {shellConfig.RcFile}? [Y/n] ");
+        Console.Write($"Add {shellConfig.DisplayDir} to PATH in {shellConfig.RcFile}? [Y/n] ");
         var key = Console.ReadKey(intercept: true);
         Console.WriteLine();
 
@@ -166,9 +163,11 @@ static class DoctorCommand
         string comment = "\n# Added by dotnet-install";
         File.AppendAllText(rcPath, $"{separator}{comment}\n{config.RcLine}\n");
 
-        Console.WriteLine($"✔ Added PATH to {config.RcFile}");
+        Console.WriteLine($"✔ Added");
         Console.WriteLine();
-        Console.WriteLine($"Restart your shell or run: source {config.RcFile}");
+        Console.WriteLine($"Run the following command:");
+        Console.WriteLine();
+        Console.WriteLine($"source {config.RcFile}");
     }
 
     static int CheckWindowsPath(string installDir, bool fix)
@@ -187,22 +186,21 @@ static class DoctorCommand
 
         if (homeSet && pathSet)
         {
-            Console.WriteLine($"✔ {ShellConfig.EnvVar} is set");
-            Console.WriteLine($"✔ {DisplayPath(installDir)} is in user PATH");
             return 0;
         }
 
-        if (!homeSet)
-            Console.WriteLine($"⚠ {ShellConfig.EnvVar} is not set");
-        if (!pathSet)
-            Console.WriteLine($"⚠ {DisplayPath(installDir)} is not in user PATH");
-
         if (!fix)
+        {
+            if (!homeSet)
+                Console.WriteLine($"⚠ {ShellConfig.EnvVar} is not set");
+            if (!pathSet)
+                Console.WriteLine($"⚠ {DisplayPath(installDir)} is not in user PATH");
             return 1;
+        }
 
         if (!Console.IsInputRedirected)
         {
-            Console.Write($"  Configure {ShellConfig.EnvVar} and PATH? [Y/n] ");
+            Console.Write($"Configure {ShellConfig.EnvVar} and PATH? [Y/n] ");
             var key = Console.ReadKey(intercept: true);
             Console.WriteLine();
 
@@ -211,10 +209,7 @@ static class DoctorCommand
         }
 
         if (!homeSet)
-        {
             Environment.SetEnvironmentVariable(ShellConfig.EnvVar, installDir, EnvironmentVariableTarget.User);
-            Console.WriteLine($"  ✔ Set {ShellConfig.EnvVar}={DisplayPath(installDir)}");
-        }
 
         if (!pathSet)
         {
@@ -222,10 +217,11 @@ static class DoctorCommand
                 ? installDir
                 : $"{installDir};{currentPath}";
             Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
-            Console.WriteLine($"  ✔ Added {DisplayPath(installDir)} to user PATH");
         }
 
-        Console.WriteLine($"  Restart your terminal to pick up the change.");
+        Console.WriteLine("✔ Added");
+        Console.WriteLine();
+        Console.WriteLine("Restart your terminal to apply PATH changes.");
         return 0;
     }
 
@@ -245,8 +241,6 @@ static class DoctorCommand
         string localBinary = Path.Combine(installDir, "dotnet-install");
         if (!File.Exists(localBinary)) return 0;
 
-        Console.WriteLine("Removing bootstrap dotnet tool (no longer needed)...");
-
         if (!fix)
             return 1;
 
@@ -262,11 +256,11 @@ static class DoctorCommand
 
         if (process.ExitCode == 0)
         {
-            Console.WriteLine("✔ Removed");
+            Console.WriteLine("✔ Removed from ~/.dotnet/tools");
             return 0;
         }
 
-        Console.WriteLine("⚠ Failed to remove bootstrap dotnet tool");
+        Console.WriteLine("⚠ Failed to remove from ~/.dotnet/tools");
         return 1;
     }
 
