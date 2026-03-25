@@ -13,17 +13,27 @@ static class DoctorCommand
         Directory.CreateDirectory(installDir);
 
         int issues = 0;
+        bool isBootstrap = IsBootstrapInstall();
 
         Console.WriteLine();
 
+        if (fix && isBootstrap)
+        {
+            Console.WriteLine("dotnet-install needs to be re-installed to " +
+                $"{DisplayPath(installDir)}.");
+            Console.WriteLine("The dotnet global tool bootstrap is temporary " +
+                "— this is a one-time setup.");
+            Console.WriteLine();
+        }
+
         // Step 1: Ensure dotnet-install binary is in the install directory
-        issues += await CheckBinaryAsync(installDir, fix);
+        issues += await CheckBinaryAsync(installDir, fix, isBootstrap);
 
-        // Step 2: Shell PATH configuration
-        issues += CheckShellPath(installDir, fix);
-
-        // Step 3: Shed bootstrap scaffolding (dotnet tool) if present
+        // Step 2: Shed bootstrap scaffolding (dotnet tool) if present
         issues += ShedBootstrapTool(installDir, fix);
+
+        // Step 3: Shell PATH configuration
+        issues += CheckShellPath(installDir, fix);
 
         // Step 4: Drain global tools if configured
         var config = UserConfig.Read(installDir);
@@ -32,10 +42,9 @@ static class DoctorCommand
             issues += await DrainGlobalToolsAsync(installDir, fix);
         }
 
-        Console.WriteLine();
-
         if (issues > 0 && !fix)
         {
+            Console.WriteLine();
             Console.WriteLine($"Found {issues} issue(s). Run `dotnet-install doctor --fix` to repair.");
         }
 
@@ -43,15 +52,26 @@ static class DoctorCommand
     }
 
     /// <summary>
+    /// Check if dotnet-install was bootstrapped via `dotnet tool install -g`.
+    /// </summary>
+    static bool IsBootstrapInstall()
+    {
+        var tools = ListDotnetGlobalTools();
+        return tools?.Any(t =>
+            t.PackageId.Equals("dotnet-install", StringComparison.OrdinalIgnoreCase)) == true;
+    }
+
+    /// <summary>
     /// Check that dotnet-install binary exists in the install directory.
     /// </summary>
-    static async Task<int> CheckBinaryAsync(string installDir, bool fix)
+    static async Task<int> CheckBinaryAsync(string installDir, bool fix, bool isBootstrap)
     {
         string targetPath = Path.Combine(installDir, "dotnet-install");
 
         if (File.Exists(targetPath))
         {
-            Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
+            if (!isBootstrap)
+                Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
             return 0;
         }
 
@@ -61,13 +81,12 @@ static class DoctorCommand
             return 1;
         }
 
-        Console.WriteLine($"⚠ dotnet-install is not in {DisplayPath(installDir)}");
-        Console.WriteLine($"  Installing...");
-        int result = await Installer.InstallPackageAsync("dotnet-install", installDir);
+        Console.WriteLine($"Installing dotnet-install to {DisplayPath(installDir)}...");
+        int result = await Installer.InstallPackageAsync("dotnet-install", installDir, quiet: true);
         if (result == 0)
-            Console.WriteLine($"  ✔ Installed dotnet-install");
+            Console.WriteLine($"✔ Installed dotnet-install");
         else
-            Console.WriteLine($"  ⚠ Failed to install dotnet-install");
+            Console.WriteLine($"⚠ Failed to install dotnet-install");
         return result == 0 ? 0 : 1;
     }
 
@@ -83,20 +102,20 @@ static class DoctorCommand
 
         if (ShellConfig.IsOnPath(installDir))
         {
-            Console.WriteLine($"✔ {shellConfig.DisplayDir} is on PATH");
             return 0;
         }
 
         if (shellConfig.RcFile is not null && shellConfig.RcFileContainsPath())
         {
-            Console.WriteLine($"✔ {shellConfig.RcFile} configures PATH");
-            Console.WriteLine($"  Restart your shell or run: source {shellConfig.RcFile}");
+            Console.WriteLine();
+            Console.WriteLine($"Restart your shell or run: source {shellConfig.RcFile}");
             return 0;
         }
 
         // Not configured
         if (shellConfig.RcFile is null)
         {
+            Console.WriteLine();
             Console.WriteLine($"⚠ {shellConfig.DisplayDir} is not on PATH");
             Console.WriteLine($"  Add to your shell config:");
             Console.WriteLine($"    {shellConfig.EnvLine}");
@@ -104,11 +123,12 @@ static class DoctorCommand
             return 1;
         }
 
-        Console.WriteLine($"⚠ {shellConfig.DisplayDir} is not on PATH");
+        Console.WriteLine();
+        Console.WriteLine($"{shellConfig.DisplayDir} needs to be added to PATH in {shellConfig.RcFile}.");
 
         if (!fix)
         {
-            Console.WriteLine($"  Run with --fix to add to {shellConfig.RcFile}");
+            Console.WriteLine($"Run with --fix to add to {shellConfig.RcFile}");
             return 1;
         }
 
@@ -119,13 +139,13 @@ static class DoctorCommand
             return 0;
         }
 
-        Console.Write($"  Add to {shellConfig.RcFile}? [Y/n] ");
+        Console.Write($"Add to {shellConfig.RcFile}? [Y/n] ");
         var key = Console.ReadKey(intercept: true);
         Console.WriteLine();
 
         if (key.Key == ConsoleKey.Escape || key.KeyChar is 'n' or 'N')
         {
-            Console.WriteLine($"  Skipped. Add manually: echo '{shellConfig.RcLine}' >> {shellConfig.RcFile}");
+            Console.WriteLine($"Skipped. Add manually: echo '{shellConfig.RcLine}' >> {shellConfig.RcFile}");
             return 1;
         }
 
@@ -146,8 +166,9 @@ static class DoctorCommand
         string comment = "\n# Added by dotnet-install";
         File.AppendAllText(rcPath, $"{separator}{comment}\n{config.RcLine}\n");
 
-        Console.WriteLine($"  ✔ Added PATH to {config.RcFile}");
-        Console.WriteLine($"    Restart your shell or run: source {config.RcFile}");
+        Console.WriteLine($"✔ Added PATH to {config.RcFile}");
+        Console.WriteLine();
+        Console.WriteLine($"Restart your shell or run: source {config.RcFile}");
     }
 
     static int CheckWindowsPath(string installDir, bool fix)
@@ -224,7 +245,7 @@ static class DoctorCommand
         string localBinary = Path.Combine(installDir, "dotnet-install");
         if (!File.Exists(localBinary)) return 0;
 
-        Console.WriteLine("⚠ dotnet-install is still registered as a dotnet global tool");
+        Console.WriteLine("Removing bootstrap dotnet tool (no longer needed)...");
 
         if (!fix)
             return 1;
@@ -241,11 +262,11 @@ static class DoctorCommand
 
         if (process.ExitCode == 0)
         {
-            Console.WriteLine("  ✔ Removed bootstrap dotnet tool");
+            Console.WriteLine("✔ Removed");
             return 0;
         }
 
-        Console.WriteLine("  ⚠ Failed to remove bootstrap dotnet tool");
+        Console.WriteLine("⚠ Failed to remove bootstrap dotnet tool");
         return 1;
     }
 
