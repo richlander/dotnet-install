@@ -59,12 +59,11 @@ static class DoctorCommand
 
     /// <summary>
     /// Check that dotnet-install binary exists in the install directory.
+    /// Uses tool list discovery instead of raw File.Exists.
     /// </summary>
     static async Task<int> CheckBinaryAsync(string installDir, bool fix, bool isBootstrap)
     {
-        string targetPath = Path.Combine(installDir, "dotnet-install");
-
-        if (File.Exists(targetPath))
+        if (IsToolInstalled(installDir, "dotnet-install"))
         {
             if (!isBootstrap)
                 Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
@@ -238,8 +237,7 @@ static class DoctorCommand
 
         if (selfTool is null) return 0;
 
-        string localBinary = Path.Combine(installDir, "dotnet-install");
-        if (!File.Exists(localBinary)) return 0;
+        if (!IsToolInstalled(installDir, "dotnet-install")) return 0;
 
         if (!fix)
             return 1;
@@ -391,6 +389,60 @@ static class DoctorCommand
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return path.Replace(home, "~");
+    }
+
+    /// <summary>
+    /// Check if a tool is installed in the install directory using the same
+    /// discovery logic as `dotnet-install ls`.
+    /// </summary>
+    static bool IsToolInstalled(string installDir, string toolName)
+    {
+        if (!Directory.Exists(installDir)) return false;
+
+        return Directory.GetFileSystemEntries(installDir)
+            .Select(p => new FileInfo(p))
+            .Any(f => Path.GetFileNameWithoutExtension(f.Name)
+                .Equals(toolName, StringComparison.OrdinalIgnoreCase)
+                && IsExecutable(f));
+    }
+
+    /// <summary>
+    /// Check if a command is available on PATH (like `which` / `where`).
+    /// </summary>
+    static string? Which(string command)
+    {
+        var psi = new ProcessStartInfo(
+            OperatingSystem.IsWindows() ? "where" : "which",
+            [command])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null) return null;
+            string output = process.StandardOutput.ReadLine() ?? "";
+            process.WaitForExit();
+            return process.ExitCode == 0 && output.Length > 0 ? output : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static bool IsExecutable(FileInfo f)
+    {
+        if (f.Name.StartsWith('_')) return false;
+        if (f.LinkTarget is not null) return true;
+
+        if (!OperatingSystem.IsWindows())
+            return (f.UnixFileMode & UnixFileMode.UserExecute) != 0;
+
+        return f.Extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+            || f.Extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase);
     }
 }
 
