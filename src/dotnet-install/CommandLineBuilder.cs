@@ -58,6 +58,21 @@ static class CommandLineBuilder
             Description = "Install from a git URL",
             HelpName = "url"
         };
+        var branchOption = new Option<string?>("--branch")
+        {
+            Description = "Git branch to track (updatable)",
+            HelpName = "name"
+        };
+        var tagOption = new Option<string?>("--tag")
+        {
+            Description = "Git tag to install (pinned)",
+            HelpName = "name"
+        };
+        var revOption = new Option<string?>("--rev")
+        {
+            Description = "Git commit SHA to install (pinned)",
+            HelpName = "sha"
+        };
         var projectOption = new Option<string?>("--project")
         {
             Description = "Path to project (or sub-path within a git repo)",
@@ -69,6 +84,9 @@ static class CommandLineBuilder
         rootCommand.Options.Add(packageOption);
         rootCommand.Options.Add(githubOption);
         rootCommand.Options.Add(gitOption);
+        rootCommand.Options.Add(branchOption);
+        rootCommand.Options.Add(tagOption);
+        rootCommand.Options.Add(revOption);
         rootCommand.Options.Add(projectOption);
         rootCommand.Options.Add(outputOption);
         rootCommand.Options.Add(localBinOption);
@@ -171,6 +189,9 @@ static class CommandLineBuilder
         installCommand.Options.Add(packageOption);
         installCommand.Options.Add(githubOption);
         installCommand.Options.Add(gitOption);
+        installCommand.Options.Add(branchOption);
+        installCommand.Options.Add(tagOption);
+        installCommand.Options.Add(revOption);
         installCommand.Options.Add(projectOption);
         installCommand.Options.Add(outputOption);
         installCommand.Options.Add(localBinOption);
@@ -185,6 +206,9 @@ static class CommandLineBuilder
                 parseResult.GetValue(packageOption),
                 parseResult.GetValue(githubOption),
                 parseResult.GetValue(gitOption),
+                parseResult.GetValue(branchOption),
+                parseResult.GetValue(tagOption),
+                parseResult.GetValue(revOption),
                 parseResult.GetValue(projectOption),
                 parseResult.GetValue(outputOption),
                 parseResult.GetValue(localBinOption),
@@ -317,6 +341,9 @@ static class CommandLineBuilder
             string? package = parseResult.GetValue(packageOption);
             string? github = parseResult.GetValue(githubOption);
             string? git = parseResult.GetValue(gitOption);
+            string? branch = parseResult.GetValue(branchOption);
+            string? tag = parseResult.GetValue(tagOption);
+            string? rev = parseResult.GetValue(revOption);
             string? projectPath = parseResult.GetValue(projectOption);
             string? outputDir = parseResult.GetValue(outputOption);
             bool useLocalBin = parseResult.GetValue(localBinOption);
@@ -325,7 +352,7 @@ static class CommandLineBuilder
             bool requireSourceLink = parseResult.GetValue(sourceLinkOption);
 
             return await InstallAction.RunAsync(
-                project, package, github, git, projectPath,
+                project, package, github, git, branch, tag, rev, projectPath,
                 outputDir, useLocalBin, useSsh, allowRollForward, requireSourceLink);
         });
 
