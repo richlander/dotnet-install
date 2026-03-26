@@ -9,6 +9,9 @@ static class InstallAction
         string? packageSpec,
         string? githubSpec,
         string? gitUrl,
+        string? branch,
+        string? tag,
+        string? rev,
         string? projectPath,
         string? outputDir,
         bool useLocalBin,
@@ -33,7 +36,7 @@ static class InstallAction
             if (!CheckPrereqs(git: true, dotnet: true))
                 return 1;
 
-            int r = GitSource.InstallFromGit(githubSpec, installDir, useSsh, projectPath, requireSourceLink);
+            int r = GitSource.InstallFromGit(githubSpec, installDir, useSsh, branch, tag, rev, projectPath, requireSourceLink);
             if (r == 0) ShellHint.PrintIfNeeded(installDir);
             return r;
         }
@@ -44,7 +47,7 @@ static class InstallAction
             if (!CheckPrereqs(git: true, dotnet: true))
                 return 1;
 
-            int r = GitSource.InstallFromUrl(gitUrl, installDir, projectPath, requireSourceLink);
+            int r = GitSource.InstallFromUrl(gitUrl, installDir, branch, tag, rev, projectPath, requireSourceLink);
             if (r == 0) ShellHint.PrintIfNeeded(installDir);
             return r;
         }

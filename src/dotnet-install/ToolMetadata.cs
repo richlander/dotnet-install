@@ -105,6 +105,11 @@ class InstallSource
     [JsonPropertyName("project")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Project { get; set; }
+
+    /// <summary>Whether this install is pinned (tag, @ref, commit SHA — not updatable).</summary>
+    [JsonPropertyName("pinned")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Pinned { get; set; }
 }
 
 /// <summary>

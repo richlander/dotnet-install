@@ -9,8 +9,11 @@ static class GitSource
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".nuget", "git-tools");
 
-    public static int InstallFromUrl(string url, string installDir, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
+    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
     {
+        string? gitRef = rev ?? tag ?? branch;
+        bool pinned = rev is not null || tag is not null;
+
         // Derive a cache key from the URL
         string cacheKey = url.Replace("://", "/").Replace(":", "/").TrimEnd('/').TrimEnd(".git".ToCharArray());
         string repoCache = Path.Combine(CacheBase, "_git", Convert.ToHexString(
@@ -27,20 +30,40 @@ static class GitSource
             if (!quiet) Console.WriteLine($"Fetching {url}...");
             if (Run("git", ["-C", repoDir, "fetch", "origin"]) != 0)
                 return 1;
+        }
+        else
+        {
+            if (!quiet) Console.WriteLine($"Cloning {url}...");
+            if (Run("git", ["clone", url, repoDir]) != 0)
+                return 1;
+        }
 
-            // Detect force push: if the local HEAD is not an ancestor of the
-            // remote branch, history was rewritten. Refuse to update silently —
-            // the user must uninstall and reinstall.
+        // Checkout ref
+        if (gitRef is not null)
+        {
+            if (!quiet) Console.WriteLine($"Checking out {gitRef}...");
+            if (Run("git", ["-C", repoDir, "checkout", gitRef]) != 0)
+            {
+                if (Run("git", ["-C", repoDir, "checkout", "--detach", $"origin/{gitRef}"]) != 0)
+                {
+                    Console.Error.WriteLine($"error: could not resolve ref '{gitRef}'");
+                    return 1;
+                }
+            }
+        }
+        else if (isExistingClone)
+        {
+            // Detect force push on default branch update
             string? defaultRef = RunCapture("git", ["-C", repoDir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
             if (defaultRef is not null)
             {
-                string branch = defaultRef.Trim().Replace("origin/", "");
+                string defaultBranch = defaultRef.Trim().Replace("origin/", "");
                 string? localHead = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
-                string? remoteHead = RunCapture("git", ["-C", repoDir, "rev-parse", $"origin/{branch}"])?.Trim();
+                string? remoteHead = RunCapture("git", ["-C", repoDir, "rev-parse", $"origin/{defaultBranch}"])?.Trim();
 
                 if (localHead is not null && remoteHead is not null && localHead != remoteHead)
                 {
-                    int ancestorCheck = Run("git", ["-C", repoDir, "merge-base", "--is-ancestor", localHead, $"origin/{branch}"]);
+                    int ancestorCheck = Run("git", ["-C", repoDir, "merge-base", "--is-ancestor", localHead, $"origin/{defaultBranch}"]);
                     if (ancestorCheck != 0)
                     {
                         Console.Error.WriteLine("error: remote history has diverged (force push detected)");
@@ -51,15 +74,9 @@ static class GitSource
                     }
                 }
 
-                Run("git", ["-C", repoDir, "checkout", branch]);
-                Run("git", ["-C", repoDir, "reset", "--hard", $"origin/{branch}"]);
+                Run("git", ["-C", repoDir, "checkout", defaultBranch]);
+                Run("git", ["-C", repoDir, "reset", "--hard", $"origin/{defaultBranch}"]);
             }
-        }
-        else
-        {
-            if (!quiet) Console.WriteLine($"Cloning {url}...");
-            if (Run("git", ["clone", url, repoDir]) != 0)
-                return 1;
         }
 
         // Capture commit SHA for provenance tracking
@@ -75,19 +92,26 @@ static class GitSource
         {
             Type = "git",
             Repository = url,
+            Ref = gitRef,
             Commit = commitSha,
-            Project = projectOverride
+            Project = projectOverride,
+            Pinned = pinned
         };
 
         return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
     }
 
-    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
+    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
     {
         // Parse owner/repo[@ref]
         int atIndex = spec.IndexOf('@');
         string ownerRepo = atIndex >= 0 ? spec[..atIndex] : spec;
-        string? gitRef = atIndex >= 0 ? spec[(atIndex + 1)..] : null;
+        string? specRef = atIndex >= 0 ? spec[(atIndex + 1)..] : null;
+
+        // Explicit flags override @ref in the spec string
+        string? gitRef = rev ?? tag ?? branch ?? specRef;
+        // @ref, --tag, and --rev are pinned; --branch is not
+        bool pinned = rev is not null || tag is not null || specRef is not null;
 
         int slashIndex = ownerRepo.IndexOf('/');
         if (slashIndex < 0)
@@ -151,13 +175,13 @@ static class GitSource
             string? defaultRef = RunCapture("git", ["-C", repoDir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
             if (defaultRef is not null)
             {
-                string branch = defaultRef.Trim().Replace("origin/", "");
+                string defaultBranch = defaultRef.Trim().Replace("origin/", "");
                 string? localHead = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
-                string? remoteHead = RunCapture("git", ["-C", repoDir, "rev-parse", $"origin/{branch}"])?.Trim();
+                string? remoteHead = RunCapture("git", ["-C", repoDir, "rev-parse", $"origin/{defaultBranch}"])?.Trim();
 
                 if (localHead is not null && remoteHead is not null && localHead != remoteHead)
                 {
-                    int ancestorCheck = Run("git", ["-C", repoDir, "merge-base", "--is-ancestor", localHead, $"origin/{branch}"]);
+                    int ancestorCheck = Run("git", ["-C", repoDir, "merge-base", "--is-ancestor", localHead, $"origin/{defaultBranch}"]);
                     if (ancestorCheck != 0)
                     {
                         Console.Error.WriteLine("error: remote history has diverged (force push detected)");
@@ -168,8 +192,8 @@ static class GitSource
                     }
                 }
 
-                Run("git", ["-C", repoDir, "checkout", branch]);
-                Run("git", ["-C", repoDir, "reset", "--hard", $"origin/{branch}"]);
+                Run("git", ["-C", repoDir, "checkout", defaultBranch]);
+                Run("git", ["-C", repoDir, "reset", "--hard", $"origin/{defaultBranch}"]);
             }
         }
 
@@ -191,7 +215,8 @@ static class GitSource
             Ref = gitRef,
             Commit = commitSha,
             Ssh = useSsh,
-            Project = projectOverride
+            Project = projectOverride,
+            Pinned = pinned
         };
 
         return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
