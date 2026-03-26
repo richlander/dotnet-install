@@ -26,15 +26,15 @@ dotnet-install app.cs                         # file-based app
 
 # NuGet package (no SDK required)
 dotnet-install --package dotnetsay
-dotnet-install --package dotnet-counters@9.0  # pinned version
+dotnet-install --package dotnet-counters@9.0.0  # pinned version
 
 # GitHub repository
-dotnet-install --github owner/repo
-dotnet-install --github owner/repo --branch main
-dotnet-install --github owner/repo --tag v2.0
-dotnet-install --github owner/repo --rev abc123
-dotnet-install --github owner/repo@v2.0      # shorthand, pinned
-dotnet-install --github owner/repo --ssh      # clone via SSH
+dotnet-install --github owner/repo            # tracks default branch, updatable
+dotnet-install --github owner/repo --branch main   # tracks branch, updatable
+dotnet-install --github owner/repo --tag v2.0      # pinned, no updates
+dotnet-install --github owner/repo --rev abc123    # pinned, no updates
+dotnet-install --github owner/repo@v2.0            # shorthand, pinned
+dotnet-install --github owner/repo --ssh           # clone via SSH
 
 # Any git URL
 dotnet-install --git https://example.com/repo.git
@@ -47,13 +47,13 @@ within the cloned repository.
 
 ## Git ref options
 
-| Flag         | Updatable | Pinned | Example                         |
-|--------------|-----------|--------|---------------------------------|
-| (none)       | yes       | no     | default branch, tracks upstream |
-| `--branch`   | yes       | no     | named branch, tracks upstream   |
-| `--tag`      | no        | yes    | fixed tag, no updates           |
-| `--rev`      | no        | yes    | fixed commit SHA, no updates    |
-| `@ref`       | no        | yes    | shorthand in `--github` spec    |
+| Flag         | Pinned | Example                         |
+|--------------|--------|---------------------------------|
+| (none)       | no     | default branch, tracks upstream |
+| `--branch`   | no     | named branch, tracks upstream   |
+| `--tag`      | yes    | fixed tag, no updates           |
+| `--rev`      | yes    | fixed commit SHA, no updates    |
+| `@ref`       | yes    | shorthand in `--github` spec    |
 
 Pinned installs are skipped by `dotnet-install update`.
 To change versions, uninstall and reinstall.
