@@ -1,13 +1,14 @@
 /// <summary>
 /// Handles the default install command logic — local project, NuGet package,
-/// or GitHub repo. Extracted from Program.cs for use with System.CommandLine.
+/// GitHub repo, or git URL. Explicit flags for each source, no heuristics.
 /// </summary>
 static class InstallAction
 {
     public static async Task<int> RunAsync(
-        string[] projectArgs,
+        string? projectArg,
         string? packageSpec,
-        string? gitSpec,
+        string? githubSpec,
+        string? gitUrl,
         string? projectPath,
         string? outputDir,
         bool useLocalBin,
@@ -18,7 +19,7 @@ static class InstallAction
         string installDir = outputDir
             ?? (useLocalBin ? Installer.LocalBinDir : Installer.DefaultInstallDir);
 
-        // --package and --github are single-item explicit sources
+        // --package: NuGet install
         if (packageSpec is not null)
         {
             int r = await Installer.InstallPackageAsync(packageSpec, installDir, allowRollForward, requireSourceLink);
@@ -26,88 +27,64 @@ static class InstallAction
             return r;
         }
 
-        if (gitSpec is not null)
+        // --github: GitHub owner/repo shorthand
+        if (githubSpec is not null)
         {
-            int r = GitSource.InstallFromGit(gitSpec, installDir, useSsh, projectPath, requireSourceLink);
+            if (!CheckPrereqs(git: true, dotnet: true))
+                return 1;
+
+            int r = GitSource.InstallFromGit(githubSpec, installDir, useSsh, projectPath, requireSourceLink);
             if (r == 0) ShellHint.PrintIfNeeded(installDir);
             return r;
         }
 
-        // No positional args — run setup if needed, otherwise show help
-        if (projectArgs.Length == 0)
+        // --git: arbitrary git URL
+        if (gitUrl is not null)
         {
-            // PATH not configured at all — configure PATH only
-            if (!ShellConfig.IsOnPath(installDir) && !ShellConfig.IsConfiguredButNotActive(installDir))
-            {
-                return await DoctorCommand.Run(installDir, fix: true, pathOnly: true);
-            }
+            if (!CheckPrereqs(git: true, dotnet: true))
+                return 1;
 
-            var rootCommand = CommandLineBuilder.CreateRootCommand();
-            HelpWriter.WriteHelp(rootCommand);
-
-            // PATH is in rc file but not active in this session (ephemeral shell)
-            if (!ShellConfig.IsOnPath(installDir) && !UserConfig.Read(installDir).TipQuiet)
-            {
-                var config = ShellConfig.Detect(installDir);
-                Console.WriteLine();
-                Console.WriteLine($"tip: {config.DisplayDir} is not in this shell's PATH.");
-                Console.WriteLine($"     Run: {config.SourceCommand}");
-                Console.WriteLine($"     To silence: dotnet-install config tip.quiet true");
-            }
-
-            return 0;
+            int r = GitSource.InstallFromUrl(gitUrl, installDir, projectPath, requireSourceLink);
+            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            return r;
         }
 
-        // Multiple args — install each one (skip prompts when multiple specified)
-        int failures = 0;
-        foreach (string arg in projectArgs)
-        {
-            int result = await InstallOneAsync(arg, installDir, useSsh, projectPath, allowRollForward, requireSourceLink);
-            if (result != 0)
-                failures++;
-        }
+        // Local project: positional arg, --project/--path, or current directory
+        string? localPath = projectArg ?? projectPath;
 
-        if (failures == 0)
-            ShellHint.PrintIfNeeded(installDir);
-
-        return failures > 0 ? 1 : 0;
-    }
-
-    static async Task<int> InstallOneAsync(
-        string projectArg, string installDir, bool useSsh,
-        string? projectPath, bool allowRollForward, bool requireSourceLink)
-    {
-        // Local path
-        if (Directory.Exists(projectArg) || File.Exists(projectArg))
+        if (localPath is not null)
         {
             if (!CheckPrereqs(dotnet: true))
                 return 1;
 
-            string? projectFile = FindProjectFile(projectArg);
+            string? projectFile = FindProjectFile(localPath);
             if (projectFile is null)
             {
-                Console.Error.WriteLine($"error: no project file found in '{projectArg}'");
+                Console.Error.WriteLine($"error: no project file found in '{localPath}'");
                 return 1;
             }
-            return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink);
+
+            int r = Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink);
+            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            return r;
         }
 
-        // owner/repo pattern
-        if (projectArg.Contains('/'))
+        // No source specified — try current directory
+        string? cwdProject = FindProjectFile(".");
+        if (cwdProject is not null)
         {
-            string ownerRepo = projectArg.Split('@')[0];
-            string url = useSsh
-                ? $"git@github.com:{ownerRepo}.git"
-                : $"https://github.com/{ownerRepo}";
-
-            if (!CheckPrereqs(git: true, dotnet: true, context: url))
+            if (!CheckPrereqs(dotnet: true))
                 return 1;
 
-            return GitSource.InstallFromGit(projectArg, installDir, useSsh, projectPath, requireSourceLink);
+            int r = Installer.Install(cwdProject, installDir, CreateLocalSource(cwdProject), requireSourceLink);
+            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            return r;
         }
 
-        // Bare name — treat as NuGet package
-        return await Installer.InstallPackageAsync(projectArg, installDir, allowRollForward, requireSourceLink);
+        // Nothing to act on — show help
+        var rootCommand = CommandLineBuilder.CreateRootCommand();
+        HelpWriter.WriteHelp(rootCommand);
+        return 0;
     }
 
     static bool CheckPrereqs(bool git = false, bool dotnet = false, string? context = null)

@@ -9,6 +9,60 @@ static class GitSource
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".nuget", "git-tools");
 
+    public static int InstallFromUrl(string url, string installDir, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
+    {
+        // Derive a cache key from the URL
+        string cacheKey = url.Replace("://", "/").Replace(":", "/").TrimEnd('/').TrimEnd(".git".ToCharArray());
+        string repoCache = Path.Combine(CacheBase, "_git", Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(cacheKey)))[..16].ToLowerInvariant());
+        string repoDir = Path.Combine(repoCache, "repo");
+        Directory.CreateDirectory(repoCache);
+
+        // Clone or fetch
+        bool isExistingClone = Directory.Exists(Path.Combine(repoDir, ".git"));
+
+        if (isExistingClone)
+        {
+            if (!quiet) Console.WriteLine($"Fetching {url}...");
+            if (Run("git", ["-C", repoDir, "fetch", "origin"]) != 0)
+                return 1;
+
+            string? defaultRef = RunCapture("git", ["-C", repoDir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
+            if (defaultRef is not null)
+            {
+                string branch = defaultRef.Trim().Replace("origin/", "");
+                Run("git", ["-C", repoDir, "checkout", branch]);
+                Run("git", ["-C", repoDir, "reset", "--hard", $"origin/{branch}"]);
+            }
+        }
+        else
+        {
+            if (!quiet) Console.WriteLine($"Cloning {url}...");
+            if (Run("git", ["clone", url, repoDir]) != 0)
+                return 1;
+        }
+
+        // Capture commit SHA for provenance tracking
+        string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
+
+        var config = ToolConfig.Read(repoDir);
+
+        string? projectFile = DiscoverProject(repoDir, projectOverride);
+        if (projectFile is null)
+            return 1;
+
+        var source = new InstallSource
+        {
+            Type = "git",
+            Repository = url,
+            Commit = commitSha,
+            Project = projectOverride
+        };
+
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
+    }
+
     public static int InstallFromGit(string spec, string installDir, bool useSsh, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
     {
         // Parse owner/repo[@ref]
