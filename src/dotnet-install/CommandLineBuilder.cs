@@ -38,10 +38,10 @@ static class CommandLineBuilder
 
         // --- Install sources (default command arguments/options) ---
 
-        var projectArg = new Argument<string[]>("project-path")
+        var projectArg = new Argument<string?>("project")
         {
-            Description = "Projects, packages, or repos to install",
-            Arity = ArgumentArity.ZeroOrMore
+            Description = "Path to project to install",
+            Arity = ArgumentArity.ZeroOrOne
         };
         var packageOption = new Option<string?>("--package")
         {
@@ -53,15 +53,22 @@ static class CommandLineBuilder
             Description = "Install from a GitHub repository",
             HelpName = "owner/repo[@ref]"
         };
+        var gitOption = new Option<string?>("--git")
+        {
+            Description = "Install from a git URL",
+            HelpName = "url"
+        };
         var projectOption = new Option<string?>("--project")
         {
-            Description = "Path to .csproj within a git repo",
+            Description = "Path to project (or sub-path within a git repo)",
             HelpName = "path"
         };
+        projectOption.Aliases.Add("--path");
 
         rootCommand.Arguments.Add(projectArg);
         rootCommand.Options.Add(packageOption);
         rootCommand.Options.Add(githubOption);
+        rootCommand.Options.Add(gitOption);
         rootCommand.Options.Add(projectOption);
         rootCommand.Options.Add(outputOption);
         rootCommand.Options.Add(localBinOption);
@@ -76,12 +83,18 @@ static class CommandLineBuilder
             Description = "Attempt to repair issues found"
         };
         doctorFixOption.Aliases.Add("--repair");
+        var doctorPathOption = new Option<bool>("--path")
+        {
+            Description = "Only check/fix shell PATH configuration"
+        };
         var doctorCommand = new Command("doctor", "Check environment setup");
         doctorCommand.Options.Add(doctorFixOption);
+        doctorCommand.Options.Add(doctorPathOption);
         doctorCommand.SetAction(async (parseResult, ct) =>
         {
             bool fix = parseResult.GetValue(doctorFixOption);
-            return await DoctorCommand.Run(Installer.DefaultInstallDir, fix);
+            bool pathOnly = parseResult.GetValue(doctorPathOption);
+            return await DoctorCommand.Run(Installer.DefaultInstallDir, fix, pathOnly);
         });
 
         var configKeyArg = new Argument<string?>("key")
@@ -154,9 +167,10 @@ static class CommandLineBuilder
         // Hidden "install" alias — install is the default action on the root command,
         // but typing "dotnet-install install ..." is natural after using remove/update.
         var installCommand = new Command("install", "Install a .NET tool") { Hidden = true };
-        installCommand.Arguments.Add(new Argument<string[]>("project-path") { Arity = ArgumentArity.ZeroOrMore });
+        installCommand.Arguments.Add(new Argument<string?>("project") { Arity = ArgumentArity.ZeroOrOne });
         installCommand.Options.Add(packageOption);
         installCommand.Options.Add(githubOption);
+        installCommand.Options.Add(gitOption);
         installCommand.Options.Add(projectOption);
         installCommand.Options.Add(outputOption);
         installCommand.Options.Add(localBinOption);
@@ -165,11 +179,12 @@ static class CommandLineBuilder
         installCommand.Options.Add(sourceLinkOption);
         installCommand.SetAction(async (parseResult, ct) =>
         {
-            var args = parseResult.GetValue<string[]>("project-path") ?? [];
+            var arg = parseResult.GetValue<string?>("project");
             return await InstallAction.RunAsync(
-                args,
+                arg,
                 parseResult.GetValue(packageOption),
                 parseResult.GetValue(githubOption),
+                parseResult.GetValue(gitOption),
                 parseResult.GetValue(projectOption),
                 parseResult.GetValue(outputOption),
                 parseResult.GetValue(localBinOption),
@@ -298,9 +313,10 @@ static class CommandLineBuilder
 
         rootCommand.SetAction(async (parseResult, ct) =>
         {
-            string[] projects = parseResult.GetValue(projectArg) ?? [];
+            string? project = parseResult.GetValue(projectArg);
             string? package = parseResult.GetValue(packageOption);
             string? github = parseResult.GetValue(githubOption);
+            string? git = parseResult.GetValue(gitOption);
             string? projectPath = parseResult.GetValue(projectOption);
             string? outputDir = parseResult.GetValue(outputOption);
             bool useLocalBin = parseResult.GetValue(localBinOption);
@@ -309,7 +325,7 @@ static class CommandLineBuilder
             bool requireSourceLink = parseResult.GetValue(sourceLinkOption);
 
             return await InstallAction.RunAsync(
-                projects, package, github, projectPath,
+                project, package, github, git, projectPath,
                 outputDir, useLocalBin, useSsh, allowRollForward, requireSourceLink);
         });
 

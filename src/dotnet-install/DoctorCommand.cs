@@ -10,29 +10,42 @@ static class DoctorCommand
     internal static readonly string Ok = OperatingSystem.IsWindows() ? "-" : "✔";
     internal static readonly string Warn = OperatingSystem.IsWindows() ? "-" : "⚠";
 
-    public static async Task<int> Run(string installDir, bool fix = false)
+    public static async Task<int> Run(string installDir, bool fix = false, bool pathOnly = false)
     {
         installDir = Path.GetFullPath(installDir);
         Directory.CreateDirectory(installDir);
 
         int issues = 0;
-        bool isBootstrap = IsBootstrapInstall();
 
         Console.WriteLine();
+
+        // Step 1: Shell PATH configuration (always first — most important for usability)
+        issues += CheckShellPath(installDir, fix);
+
+        if (pathOnly)
+        {
+            if (IsBootstrapInstall())
+            {
+                Console.WriteLine();
+                Console.WriteLine("Run the following to complete installation:");
+                Console.WriteLine();
+                Console.WriteLine("dotnet-install doctor --fix");
+            }
+            return 0;
+        }
+
+        bool isBootstrap = IsBootstrapInstall();
 
         if (fix && isBootstrap)
         {
             Console.WriteLine("Setting up dotnet-install (one-time)...");
         }
 
-        // Step 1: Ensure dotnet-install binary is in the install directory
+        // Step 2: Ensure dotnet-install binary is in the install directory
         issues += await CheckBinaryAsync(installDir, fix, isBootstrap);
 
-        // Step 2: Shed bootstrap scaffolding (dotnet tool) if present
+        // Step 3: Shed bootstrap scaffolding (dotnet tool) if present
         issues += ShedBootstrapTool(installDir, fix);
-
-        // Step 3: Shell PATH configuration
-        issues += CheckShellPath(installDir, fix);
 
         // Step 4: Drain global tools if configured
         var config = UserConfig.Read(installDir);
@@ -105,20 +118,23 @@ static class DoctorCommand
         if (shellConfig.RcFile is not null && shellConfig.RcFileContainsPath())
         {
             Console.WriteLine();
-            Console.WriteLine($"Run the following command:");
+            Console.WriteLine($"To configure your current shell, run:");
             Console.WriteLine();
-            Console.WriteLine($"source {shellConfig.RcFile}");
+            Console.WriteLine($"{shellConfig.SourceCommand}");
             return 0;
         }
 
         // Not configured
         if (shellConfig.RcFile is null)
         {
+            // Still write the env file so the user can source it
+            WriteEnvFile(shellConfig);
+
             Console.WriteLine();
             Console.WriteLine($"{Warn} {shellConfig.DisplayDir} is not on PATH");
-            Console.WriteLine($"  Add to your shell config:");
-            Console.WriteLine($"    {shellConfig.EnvLine}");
-            Console.WriteLine($"    {shellConfig.ExportLine}");
+            Console.WriteLine($"To activate in this shell:");
+            Console.WriteLine($"  {shellConfig.SourceCommand}");
+            Console.WriteLine($"To configure permanently, add that line to your shell config.");
             return 1;
         }
 
@@ -152,8 +168,25 @@ static class DoctorCommand
         return 0;
     }
 
+    static void WriteEnvFile(ShellConfig config)
+    {
+        string envPath = config.EnvFileAbsolute;
+        string? envDir = Path.GetDirectoryName(envPath);
+        if (envDir is not null)
+            Directory.CreateDirectory(envDir);
+        File.WriteAllText(envPath, config.EnvFileContent);
+    }
+
     static void WritePathToRcFile(ShellConfig config)
     {
+        // Write the env file (create/overwrite)
+        string envPath = config.EnvFileAbsolute;
+        string? envDir = Path.GetDirectoryName(envPath);
+        if (envDir is not null)
+            Directory.CreateDirectory(envDir);
+        File.WriteAllText(envPath, config.EnvFileContent);
+
+        // Append source line to rc file
         string rcPath = config.RcFileAbsolute!;
 
         string? rcDir = Path.GetDirectoryName(rcPath);
@@ -167,9 +200,9 @@ static class DoctorCommand
 
         Console.WriteLine($"{Ok} Added");
         Console.WriteLine();
-        Console.WriteLine($"Run the following command:");
+        Console.WriteLine($"To configure your current shell, run:");
         Console.WriteLine();
-        Console.WriteLine($"source {config.RcFile}");
+        Console.WriteLine($"{config.SourceCommand}");
     }
 
     static int CheckWindowsPath(string installDir, bool fix)
