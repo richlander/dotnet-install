@@ -1,32 +1,62 @@
 ---
 name: dotnet-install
 description: >
-  Install .NET executables to PATH — like cargo install
-  and go install. Build from source, install from NuGet,
-  or clone from GitHub.
+  Build, install, list, and remove .NET tools using dotnet-install.
 ---
 
 # dotnet-install
 
 Install .NET executables to PATH — like `cargo install`
-and `go install`.
+and `go install`. Build from source, install from NuGet,
+or clone from GitHub.
 
-## Install modes
+## Install sources
+
+Each source requires an explicit flag. With no arguments,
+`dotnet-install` in a directory with a project builds and
+installs it (like `dotnet publish`). With nothing to act on,
+it prints help.
 
 ```bash
-dotnet-install .                              # build & install current project
-dotnet-install src/my-tool                    # subdirectory
+# Local project (default — works like dotnet publish)
+dotnet-install                                # current directory
+dotnet-install src/my-tool                    # positional path
+dotnet-install --project src/my-tool          # explicit (like dotnet run --project)
 dotnet-install app.cs                         # file-based app
-dotnet-install --package dotnetsay            # install from NuGet
+
+# NuGet package (no SDK required)
+dotnet-install --package dotnetsay
 dotnet-install --package dotnet-counters@9.0  # pinned version
-dotnet-install --github richlander/my-tool    # install from GitHub
-dotnet-install --github owner/repo@v1.0      # tagged release
+
+# GitHub repository
+dotnet-install --github owner/repo
+dotnet-install --github owner/repo --branch main
+dotnet-install --github owner/repo --tag v2.0
+dotnet-install --github owner/repo --rev abc123
+dotnet-install --github owner/repo@v2.0      # shorthand, pinned
+dotnet-install --github owner/repo --ssh      # clone via SSH
+
+# Any git URL
+dotnet-install --git https://example.com/repo.git
+dotnet-install --git https://example.com/repo.git --tag v1.0
 ```
 
-Bare positional args are auto-classified: local paths
-build from source, `owner/repo` patterns prompt for
-GitHub, and single names prompt for NuGet. Use explicit
-flags (`--package`, `--github`) to skip prompts.
+`--path` is an alias for `--project`. When combined with
+`--github` or `--git`, `--project` specifies a sub-path
+within the cloned repository.
+
+## Git ref options
+
+| Flag         | Updatable | Pinned | Example                         |
+|--------------|-----------|--------|---------------------------------|
+| (none)       | yes       | no     | default branch, tracks upstream |
+| `--branch`   | yes       | no     | named branch, tracks upstream   |
+| `--tag`      | no        | yes    | fixed tag, no updates           |
+| `--rev`      | no        | yes    | fixed commit SHA, no updates    |
+| `@ref`       | no        | yes    | shorthand in `--github` spec    |
+
+Pinned installs are skipped by `dotnet-install update`.
+To change versions, uninstall and reinstall.
 
 ## Subcommands
 
@@ -49,10 +79,31 @@ Tools are installed to `~/.dotnet/bin/` by default.
 Override with `DOTNET_TOOL_BIN` env var, `-o <dir>`,
 or `--local-bin` (uses `~/.local/bin/`).
 
-## Behavior
+## PATH configuration
 
-- Remote installs (NuGet) auto-enable roll-forward
-  if the tool targets an older runtime
+`dotnet-install` uses a dedicated env file (`~/.dotnet/bin/env`)
+that is sourced from the shell's rc file. Run
+`dotnet-install doctor --fix` to configure PATH automatically.
+To activate in the current shell without restarting:
+
+```bash
+. "$HOME/.dotnet/bin/env"          # sh/bash/zsh
+source "$HOME/.dotnet/bin/env.fish" # fish
+```
+
+## Reliable behavior
+
+- Git updates verify that the remote history is a
+  continuation of the local history. If a force push
+  is detected, the update is refused — the user must
+  uninstall and reinstall the tool.
+- Pinned installs (`--tag`, `--rev`, `@ref`) are
+  immutable. `update` skips them and reports the
+  pinned ref. Changing versions requires an explicit
+  uninstall and reinstall.
 - Building from source requires the .NET SDK;
-  `--package` works without the SDK
-- Multiple positional args skip confirmation prompts
+  `--package` works without the SDK.
+- NuGet installs auto-enable roll-forward if the
+  tool targets an older runtime.
+- `--require-sourcelink` enforces SourceLink metadata
+  in installed assemblies.
