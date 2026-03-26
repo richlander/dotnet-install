@@ -252,7 +252,13 @@ static class DoctorCommand
         if (process is null) return 1;
         process.WaitForExit();
 
-        if (process.ExitCode == 0)
+        // The exit code may be unreliable (e.g. on Windows the store cleanup
+        // can fail even though the tool was removed). Verify with tool list.
+        var remaining = ListDotnetGlobalTools();
+        bool removed = remaining?.Any(t =>
+            t.PackageId.Equals("dotnet-install", StringComparison.OrdinalIgnoreCase)) != true;
+
+        if (removed)
         {
             Console.WriteLine("✔ Removed from ~/.dotnet/tools");
             return 0;
