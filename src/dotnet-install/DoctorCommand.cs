@@ -7,6 +7,9 @@ using System.Text.Json.Serialization;
 /// </summary>
 static class DoctorCommand
 {
+    internal static readonly string Ok = OperatingSystem.IsWindows() ? "-" : "✔";
+    internal static readonly string Warn = OperatingSystem.IsWindows() ? "-" : "⚠";
+
     public static async Task<int> Run(string installDir, bool fix = false)
     {
         installDir = Path.GetFullPath(installDir);
@@ -66,21 +69,21 @@ static class DoctorCommand
         if (IsToolInstalled(installDir, "dotnet-install"))
         {
             if (!isBootstrap)
-                Console.WriteLine($"✔ dotnet-install is in {DisplayPath(installDir)}");
+                Console.WriteLine($"{Ok} dotnet-install is in {DisplayPath(installDir)}");
             return 0;
         }
 
         if (!fix)
         {
-            Console.WriteLine($"⚠ dotnet-install is not in {DisplayPath(installDir)}");
+            Console.WriteLine($"{Warn} dotnet-install is not in {DisplayPath(installDir)}");
             return 1;
         }
 
         int result = await Installer.InstallPackageAsync("dotnet-install", installDir, quiet: true);
         if (result == 0)
-            Console.WriteLine($"✔ Installed to {DisplayPath(installDir)}");
+            Console.WriteLine($"{Ok} Installed to {DisplayPath(installDir)}");
         else
-            Console.WriteLine($"⚠ Failed to install dotnet-install");
+            Console.WriteLine($"{Warn} Failed to install dotnet-install");
         return result == 0 ? 0 : 1;
     }
 
@@ -112,7 +115,7 @@ static class DoctorCommand
         if (shellConfig.RcFile is null)
         {
             Console.WriteLine();
-            Console.WriteLine($"⚠ {shellConfig.DisplayDir} is not on PATH");
+            Console.WriteLine($"{Warn} {shellConfig.DisplayDir} is not on PATH");
             Console.WriteLine($"  Add to your shell config:");
             Console.WriteLine($"    {shellConfig.EnvLine}");
             Console.WriteLine($"    {shellConfig.ExportLine}");
@@ -162,7 +165,7 @@ static class DoctorCommand
         string comment = "\n# Added by dotnet-install";
         File.AppendAllText(rcPath, $"{separator}{comment}\n{config.RcLine}\n");
 
-        Console.WriteLine($"✔ Added");
+        Console.WriteLine($"{Ok} Added");
         Console.WriteLine();
         Console.WriteLine($"Run the following command:");
         Console.WriteLine();
@@ -191,9 +194,9 @@ static class DoctorCommand
         if (!fix)
         {
             if (!homeSet)
-                Console.WriteLine($"⚠ {ShellConfig.EnvVar} is not set");
+                Console.WriteLine($"{Warn} {ShellConfig.EnvVar} is not set");
             if (!pathSet)
-                Console.WriteLine($"⚠ {DisplayPath(installDir)} is not in user PATH");
+                Console.WriteLine($"{Warn} {DisplayPath(installDir)} is not in user PATH");
             return 1;
         }
 
@@ -218,7 +221,7 @@ static class DoctorCommand
             Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.User);
         }
 
-        Console.WriteLine("✔ Added");
+        Console.WriteLine($"{Ok} Added");
         Console.WriteLine();
         Console.WriteLine("Restart your terminal to apply PATH changes.");
         return 0;
@@ -242,6 +245,13 @@ static class DoctorCommand
         if (!fix)
             return 1;
 
+        // On Windows, the bootstrap .cmd shim is still being executed by the
+        // calling shell. Uninstalling it mid-execution deletes the shim and
+        // produces "The batch file cannot be found." Defer to the next run,
+        // which will be invoked from ~/.dotnet/bin instead.
+        if (OperatingSystem.IsWindows() && IsRunningFromDotnetTools())
+            return 0;
+
         var psi = new ProcessStartInfo("dotnet", ["tool", "uninstall", "-g", "dotnet-install"])
         {
             RedirectStandardOutput = true,
@@ -260,11 +270,11 @@ static class DoctorCommand
 
         if (removed)
         {
-            Console.WriteLine("✔ Removed from ~/.dotnet/tools");
+            Console.WriteLine($"{Ok} Removed from ~/.dotnet/tools");
             return 0;
         }
 
-        Console.WriteLine("⚠ Failed to remove from ~/.dotnet/tools");
+        Console.WriteLine($"{Warn} Failed to remove from ~/.dotnet/tools");
         return 1;
     }
 
@@ -284,11 +294,11 @@ static class DoctorCommand
 
         if (candidates.Count == 0)
         {
-            Console.WriteLine("✔ No dotnet global tools to drain");
+            Console.WriteLine($"{Ok} No dotnet global tools to drain");
             return 0;
         }
 
-        Console.WriteLine($"⚠ {candidates.Count} dotnet global tool(s) to drain");
+        Console.WriteLine($"{Warn} {candidates.Count} dotnet global tool(s) to drain");
 
         if (!fix)
         {
@@ -307,7 +317,7 @@ static class DoctorCommand
 
             if (result != 0)
             {
-                Console.WriteLine($"  ⚠ Failed to install {tool.PackageId} — skipping");
+                Console.WriteLine($"  {Warn} Failed to install {tool.PackageId} — skipping");
                 failed++;
                 continue;
             }
@@ -325,12 +335,12 @@ static class DoctorCommand
                 process.WaitForExit();
                 if (process.ExitCode == 0)
                 {
-                    Console.WriteLine($"  ✔ {tool.PackageId} {tool.Version}");
+                    Console.WriteLine($"  {Ok} {tool.PackageId} {tool.Version}");
                     drained++;
                 }
                 else
                 {
-                    Console.WriteLine($"  ⚠ Installed {tool.PackageId} but failed to remove dotnet tool");
+                    Console.WriteLine($"  {Warn} Installed {tool.PackageId} but failed to remove dotnet tool");
                     failed++;
                 }
             }
@@ -410,6 +420,21 @@ static class DoctorCommand
             .Any(f => Path.GetFileNameWithoutExtension(f.Name)
                 .Equals(toolName, StringComparison.OrdinalIgnoreCase)
                 && IsExecutable(f));
+    }
+
+    /// <summary>
+    /// Check if the current process is running from the dotnet global tools directory.
+    /// </summary>
+    static bool IsRunningFromDotnetTools()
+    {
+        string? exePath = Environment.ProcessPath;
+        if (exePath is null) return false;
+
+        string toolsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".dotnet", "tools");
+
+        return exePath.StartsWith(toolsDir, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
