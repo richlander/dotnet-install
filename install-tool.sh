@@ -2,9 +2,9 @@
 # Install dotnet-install via dotnet tool (SDK workflow).
 # Usage: ./install-tool.sh
 #
-# Installs dotnet-install as a .NET global tool, then graduates it to
-# a standalone binary in ~/.dotnet/bin/ with full NuGet pedigree.
-# The dotnet tool scaffolding is removed automatically.
+# Installs dotnet-install as a .NET global tool and configures
+# your shell PATH. Run `dotnet-install doctor --fix` later to
+# graduate to a standalone binary in ~/.dotnet/bin/.
 #
 # Requires the .NET SDK.
 #
@@ -20,9 +20,10 @@ main() {
     say "installing dotnet-install via dotnet tool..."
     dotnet tool install -g dotnet-install
 
-    # Graduate to standalone binary and remove dotnet tool
-    say "graduating to standalone install..."
-    dotnet-install doctor --fix
+    # Configure shell PATH only — graduation to standalone binary
+    # happens later via `dotnet-install doctor --fix`
+    say "configuring PATH..."
+    dotnet-install doctor --fix --path
 }
 
 say() {

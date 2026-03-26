@@ -36,10 +36,10 @@ static class InstallAction
         // No positional args — run setup if needed, otherwise show help
         if (projectArgs.Length == 0)
         {
-            // PATH not configured at all — run doctor to set up
+            // PATH not configured at all — configure PATH only
             if (!ShellConfig.IsOnPath(installDir) && !ShellConfig.IsConfiguredButNotActive(installDir))
             {
-                return await DoctorCommand.Run(installDir, fix: true);
+                return await DoctorCommand.Run(installDir, fix: true, pathOnly: true);
             }
 
             var rootCommand = CommandLineBuilder.CreateRootCommand();
@@ -51,7 +51,7 @@ static class InstallAction
                 var config = ShellConfig.Detect(installDir);
                 Console.WriteLine();
                 Console.WriteLine($"tip: {config.DisplayDir} is not in this shell's PATH.");
-                Console.WriteLine($"     Run: source {config.RcFile}");
+                Console.WriteLine($"     Run: {config.SourceCommand}");
                 Console.WriteLine($"     To silence: dotnet-install config tip.quiet true");
             }
 

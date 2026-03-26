@@ -43,7 +43,7 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
 
         string? rcFile = shellName switch
         {
-            "zsh" => "~/.zshrc",
+            "zsh" => "~/.zshenv",
             "bash" => GetBashRcFile(),
             "fish" => "~/.config/fish/config.fish",
             _ => OperatingSystem.IsWindows() ? null : "~/.profile"
@@ -55,12 +55,58 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
     }
 
     /// <summary>
-    /// The lines to append to the rc file (shell-specific syntax).
+    /// Env file name for the detected shell (e.g. "env" for POSIX shells, "env.fish" for fish).
     /// </summary>
-    public string RcLine => $"{EnvLine}\n{ExportLine}";
+    public string EnvFileName => ShellName == "fish" ? "env.fish" : "env";
 
     /// <summary>
-    /// Check if the rc file already contains the PATH configuration.
+    /// Shell-expandable path to the env file (e.g. "$HOME/.dotnet/bin/env").
+    /// </summary>
+    public string EnvFilePath
+    {
+        get
+        {
+            string pathEntry = DisplayDir.Replace("~", "$HOME");
+            return $"{pathEntry}/{EnvFileName}";
+        }
+    }
+
+    /// <summary>
+    /// Absolute path to the env file on disk.
+    /// </summary>
+    public string EnvFileAbsolute
+    {
+        get
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(DisplayDir.Replace("~", home), EnvFileName);
+        }
+    }
+
+    /// <summary>
+    /// Command to activate the environment in the current shell session.
+    /// </summary>
+    public string SourceCommand => ShellName == "fish"
+        ? $"source \"{EnvFilePath}\""
+        : $". \"{EnvFilePath}\"";
+
+    /// <summary>
+    /// Content of the env file (shell-specific syntax).
+    /// </summary>
+    public string EnvFileContent => ShellName == "fish"
+        ? $"# Added by dotnet-install\n{EnvLine}\n{ExportLine}\n"
+        : $"#!/bin/sh\n# Added by dotnet-install\n{EnvLine}\n{ExportLine}\n";
+
+    /// <summary>
+    /// The line to append to the rc file — sources the env file.
+    /// </summary>
+    public string RcLine => ShellName == "fish"
+        ? $"source \"{EnvFilePath}\""
+        : $". \"{EnvFilePath}\"";
+
+    /// <summary>
+    /// Check if the rc file already contains the PATH configuration
+    /// (either the env file source line or legacy inline exports).
     /// </summary>
     public bool RcFileContainsPath()
     {
@@ -68,7 +114,8 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
             return false;
 
         string content = File.ReadAllText(RcFileAbsolute);
-        return content.Contains(EnvVar) ||
+        return content.Contains(EnvFileName) ||
+               content.Contains(EnvVar) ||
                content.Contains(DisplayDir.Replace("~", "$HOME")) ||
                content.Contains(DisplayDir);
     }
@@ -132,14 +179,15 @@ static class ShellHint
         {
             Console.WriteLine($"Run doctor to configure your shell:");
             Console.WriteLine();
-            Console.WriteLine($"  dotnet-install doctor --fix");
+            Console.WriteLine($"dotnet-install doctor --fix");
         }
         else
         {
-            Console.WriteLine($"Add to your shell config:");
+            Console.WriteLine($"To activate in this shell:");
             Console.WriteLine();
-            Console.WriteLine($"  {config.EnvLine}");
-            Console.WriteLine($"  {config.ExportLine}");
+            Console.WriteLine($"{config.SourceCommand}");
+            Console.WriteLine();
+            Console.WriteLine($"To configure permanently, add that line to your shell config.");
         }
 
         Console.WriteLine();
@@ -149,7 +197,7 @@ static class ShellHint
     {
         Console.WriteLine($"Run doctor to configure your PATH:");
         Console.WriteLine();
-        Console.WriteLine($"  dotnet-install doctor --fix");
+        Console.WriteLine($"dotnet-install doctor --fix");
         Console.WriteLine();
     }
 }

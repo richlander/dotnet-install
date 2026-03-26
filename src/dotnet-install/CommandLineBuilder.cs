@@ -76,12 +76,18 @@ static class CommandLineBuilder
             Description = "Attempt to repair issues found"
         };
         doctorFixOption.Aliases.Add("--repair");
+        var doctorPathOption = new Option<bool>("--path")
+        {
+            Description = "Only check/fix shell PATH configuration"
+        };
         var doctorCommand = new Command("doctor", "Check environment setup");
         doctorCommand.Options.Add(doctorFixOption);
+        doctorCommand.Options.Add(doctorPathOption);
         doctorCommand.SetAction(async (parseResult, ct) =>
         {
             bool fix = parseResult.GetValue(doctorFixOption);
-            return await DoctorCommand.Run(Installer.DefaultInstallDir, fix);
+            bool pathOnly = parseResult.GetValue(doctorPathOption);
+            return await DoctorCommand.Run(Installer.DefaultInstallDir, fix, pathOnly);
         });
 
         var configKeyArg = new Argument<string?>("key")
