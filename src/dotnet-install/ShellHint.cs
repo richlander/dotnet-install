@@ -114,7 +114,7 @@ static class ShellHint
         var config = ShellConfig.Detect(installDir);
 
         Console.WriteLine();
-        Console.WriteLine($"⚠ {config.DisplayDir} is not in your PATH.");
+        Console.WriteLine($"{DoctorCommand.Warn} {config.DisplayDir} is not in your PATH.");
 
         if (OperatingSystem.IsWindows())
         {
