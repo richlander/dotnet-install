@@ -113,6 +113,75 @@ public class SourcePreflightTests : IDisposable
         Assert.Equal(expectedMajor, major);
     }
 
+    // ---- SDK-implied OutputType tests ----
+
+    [Theory]
+    [InlineData("Microsoft.NET.Sdk.Web")]
+    [InlineData("Microsoft.NET.Sdk.Worker")]
+    public void EvaluateProject_SdkImpliesExe_WhenNoOutputType(string sdk)
+    {
+        string path = Path.Combine(_tempDir, $"app-{Path.GetRandomFileName()}.csproj");
+        File.WriteAllText(path, $"""
+            <Project Sdk="{sdk}">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+              </PropertyGroup>
+            </Project>
+            """);
+
+        var info = EvaluateProjectHelper(path);
+        Assert.Equal("Exe", info.outputType);
+    }
+
+    [Fact]
+    public void EvaluateProject_StandardSdk_DefaultsToLibrary_WhenNoOutputType()
+    {
+        string path = Path.Combine(_tempDir, $"lib-{Path.GetRandomFileName()}.csproj");
+        File.WriteAllText(path, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+              </PropertyGroup>
+            </Project>
+            """);
+
+        var info = EvaluateProjectHelper(path);
+        Assert.Equal("Library", info.outputType);
+    }
+
+    [Fact]
+    public void EvaluateProject_ExplicitOutputType_OverridesSdkDefault()
+    {
+        string path = Path.Combine(_tempDir, $"app-{Path.GetRandomFileName()}.csproj");
+        File.WriteAllText(path, """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup>
+                <OutputType>WinExe</OutputType>
+                <TargetFramework>net8.0</TargetFramework>
+              </PropertyGroup>
+            </Project>
+            """);
+
+        var info = EvaluateProjectHelper(path);
+        Assert.Equal("WinExe", info.outputType);
+    }
+
+    [Theory]
+    [InlineData("Microsoft.NET.Sdk.Web", true)]
+    [InlineData("Microsoft.NET.Sdk.Worker", true)]
+    [InlineData("Microsoft.NET.Sdk", false)]
+    [InlineData("Microsoft.NET.Sdk.Razor", false)]
+    public void SdkImpliesExecutable(string sdk, bool expected)
+    {
+        Assert.Equal(expected, Installer.SdkImpliesExecutable(sdk));
+    }
+
+    [Fact]
+    public void SdkImpliesExecutable_Null_ReturnsFalse()
+    {
+        Assert.False(Installer.SdkImpliesExecutable(null));
+    }
+
     // ---- Helpers ----
 
     string CreateCsproj(string? tfm)
@@ -144,7 +213,10 @@ public class SourcePreflightTests : IDisposable
         if (string.IsNullOrEmpty(assemblyName))
             assemblyName = Path.GetFileNameWithoutExtension(projectFile);
 
-        string outputType = props.FirstOrDefault(e => e.Name.LocalName == "OutputType")?.Value ?? "Library";
+        string? sdk = doc.Root?.Attribute("Sdk")?.Value;
+        string defaultOutputType = Installer.SdkImpliesExecutable(sdk) ? "Exe" : "Library";
+
+        string outputType = props.FirstOrDefault(e => e.Name.LocalName == "OutputType")?.Value ?? defaultOutputType;
         bool isNativeAot = string.Equals(
             props.FirstOrDefault(e => e.Name.LocalName == "PublishAot")?.Value,
             "true", StringComparison.OrdinalIgnoreCase);
