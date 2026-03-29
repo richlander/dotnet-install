@@ -538,9 +538,12 @@ static class Installer
 
         bool isNativeAot = IsPropertyTrue(props, "PublishAot");
 
+        string? sdk = doc.Root?.Attribute("Sdk")?.Value;
+        string defaultOutputType = SdkImpliesExecutable(sdk) ? "Exe" : "Library";
+
         return new ProjectInfo(
             AssemblyName: assemblyName,
-            OutputType: GetProperty(props, "OutputType") ?? "Library",
+            OutputType: GetProperty(props, "OutputType") ?? defaultOutputType,
             IsNativeAot: isNativeAot,
             IsSingleFile: IsPropertyTrue(props, "PublishSingleFile"),
             IsSelfContained: IsPropertyTrue(props, "SelfContained"),
@@ -619,6 +622,14 @@ static class Installer
     static bool IsExecutable(string outputType) =>
         outputType.Equals("Exe", StringComparison.OrdinalIgnoreCase) ||
         outputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// SDKs that implicitly set OutputType=Exe (so it won't appear in the raw XML).
+    /// </summary>
+    internal static bool SdkImpliesExecutable(string? sdk) =>
+        sdk is not null && (
+            sdk.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase) ||
+            sdk.Equals("Microsoft.NET.Sdk.Worker", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Warn if the project's TFM is newer than the installed SDK.

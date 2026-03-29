@@ -274,7 +274,9 @@ static class GitSource
                     .Where(e => e.Parent?.Name.LocalName == "PropertyGroup");
 
                 string? outputType = props.FirstOrDefault(e => e.Name.LocalName == "OutputType")?.Value;
-                if (!string.Equals(outputType, "Exe", StringComparison.OrdinalIgnoreCase))
+                string? sdk = doc.Root?.Attribute("Sdk")?.Value;
+                if (!string.Equals(outputType, "Exe", StringComparison.OrdinalIgnoreCase)
+                    && !Installer.SdkImpliesExecutable(sdk))
                     continue;
 
                 // Skip test projects
