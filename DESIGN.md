@@ -10,17 +10,6 @@ different installation model. The goal is a flat, transparent
 layout — real binaries on PATH — matching `cargo install`,
 `go install`, and Homebrew.
 
-## Install layout
-
-Tools land in `~/.dotnet/bin/` (override with `DOTNET_TOOL_BIN`).
-This is deliberately separate from `~/.dotnet/tools/`, which
-belongs to `dotnet tool install -g`.
-
-| Directory          | Owner                    | Layout                     |
-| ------------------ | ------------------------ | -------------------------- |
-| `~/.dotnet/tools/` | `dotnet tool install -g` | Shim scripts → `.store/`   |
-| `~/.dotnet/bin/`   | `dotnet-install`         | Real binaries, flat        |
-
 ## Scope: single-file executables only
 
 `dotnet-install` installs **only single-file native executables** —
