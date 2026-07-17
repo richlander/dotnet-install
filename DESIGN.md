@@ -21,23 +21,38 @@ belongs to `dotnet tool install -g`.
 | `~/.dotnet/tools/` | `dotnet tool install -g` | Shim scripts → `.store/`   |
 | `~/.dotnet/bin/`   | `dotnet-install`         | Real binaries, flat        |
 
-### Single-file binaries (Native AOT)
+## Scope: single-file executables only
 
-Copied directly into the install directory. No subdirectories,
-no shims — the binary *is* the tool.
+`dotnet-install` installs **only single-file native executables** —
+Native AOT binaries and self-contained single-file tools (CLI tools v2).
+It does not install managed (multi-file) tools or run tools under
+`dotnet exec`. When a NuGet package is a managed tool, or a source build
+doesn't produce a single file, the tool stops and directs the user to
+`dotnet tool install`, which owns that model.
 
-### Multi-file binaries (managed)
+This keeps the layout flat and the runtime story simple: the binary *is*
+the tool, with no host dispatch, entry-point resolution, or roll-forward.
 
-Stored in `_<appname>/` subdirectory. A symlink (Unix) or
-`.cmd` shim (Windows) in the install directory dispatches to
-the real entry point — busybox-style. This keeps the top-level
-directory clean while supporting managed tools that need
-multiple files.
+## Install layout
+
+Tools land in `~/.dotnet/bin/` (override with `DOTNET_TOOL_BIN`).
+This is deliberately separate from `~/.dotnet/tools/`, which
+belongs to `dotnet tool install -g`.
+
+| Directory          | Owner                    | Layout                     |
+| ------------------ | ------------------------ | -------------------------- |
+| `~/.dotnet/tools/` | `dotnet tool install -g` | Shim scripts → `.store/`   |
+| `~/.dotnet/bin/`   | `dotnet-install`         | Real binaries, flat        |
+
+The single-file binary is copied directly into the install directory.
+No subdirectories, no shims — the binary *is* the tool. A `_<appname>/`
+sidecar directory holds only `.tool.json` metadata that records the
+install source for `update`.
 
 ## Cross-platform
 
-- **Unix**: symlinks and `chmod +x`
-- **Windows**: `.cmd` shims and `.exe` detection
+- **Unix**: `chmod +x` on the placed binary
+- **Windows**: `.exe` detection
 
 ## Prompting model
 
@@ -52,30 +67,14 @@ Bare args prompt for remote sources as an anti-typosquatting
 measure. Explicit flags signal intent and skip all prompts.
 Multiple bare args also skip prompts (batch mode).
 
-## Roll-forward
-
-When a NuGet tool targets a runtime that isn't installed,
-`dotnet tool install` silently installs but the tool crashes
-on first launch with "You must install or update .NET."
-
-`dotnet-install` handles this differently by source:
-
-- **Remote (NuGet)**: auto-enables roll-forward with an
-  informational message. The user chose to install a
-  pre-built package — making it work is more important
-  than strict version matching.
-- **Local (source build)**: prompts the user, since they
-  control the target framework and may prefer to update it.
-
-The `--allow-roll-forward` flag suppresses the prompt for
-local installs.
-
 ## SDK preflight
 
 Building from source requires the .NET SDK. Rather than
 letting `dotnet publish` fail with a confusing error (or
 a "command not found"), the tool checks for the SDK
 upfront and suggests `--package` as the SDK-free alternative.
+It also warns (via `dotnet --list-runtimes`) when a project
+targets a framework newer than any installed runtime.
 
 ## Git cache
 

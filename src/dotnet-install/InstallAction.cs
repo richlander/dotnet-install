@@ -16,7 +16,6 @@ static class InstallAction
         string? outputDir,
         bool useLocalBin,
         bool useSsh,
-        bool allowRollForward,
         bool requireSourceLink)
     {
         string installDir = outputDir
@@ -25,7 +24,7 @@ static class InstallAction
         // --package: NuGet install
         if (packageSpec is not null)
         {
-            int r = await Installer.InstallPackageAsync(packageSpec, installDir, allowRollForward, requireSourceLink);
+            int r = await Installer.InstallPackageAsync(packageSpec, installDir, requireSourceLink);
             if (r == 0) ShellHint.PrintIfNeeded(installDir);
             return r;
         }

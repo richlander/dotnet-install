@@ -61,7 +61,7 @@ The tool lives at `src/dotnet-install/` in this repo:
 - `CommandLineBuilder.cs` — System.CommandLine command/option
   definitions and handler wiring
 - `Installer.cs` — Core install logic: project eval,
-  `dotnet publish`, single/multi-file placement,
+  `dotnet publish`, single-file placement,
   NuGet package install, file-based app support
 - `GitSource.cs` — Git clone/fetch from GitHub repos,
   project discovery, `.dotnet-install.json` manifest
@@ -72,15 +72,12 @@ The tool lives at `src/dotnet-install/` in this repo:
 - `EnvCommand.cs` — Print environment info (`cargo env` style)
 - `ProjectSelector.cs` — Interactive arrow-key selector
   for repos with multiple executable projects
-- `HostDispatch.cs` — Busybox-style dispatch for managed
-  tools (Unix symlink-based, Windows .cmd shim-based)
 - `ListCommand.cs` — Lists installed tools
 - `RemoveCommand.cs` — Removes installed tools
 - `UpdateCommand.cs` — Updates installed tools
 - `SearchCommand.cs` — Search NuGet for packages
 - `InfoCommand.cs` — Show tool details and provenance
 - `OutdatedCommand.cs` — Check for newer versions
-- `RunCommand.cs` — Run without installing (npx-like)
 - `CompletionCommand.cs` — Shell completion setup
 - `SkillCommand.cs` — Prints embedded skill definition
 - `skill.md` — Embedded skill for AI assistants (end-user)
@@ -143,7 +140,6 @@ dotnet install update <tool>     # update installed tools
 dotnet install search <query>    # search NuGet
 dotnet install info <tool>       # show tool details
 dotnet install outdated          # check for newer versions
-dotnet install run <pkg> [args]  # run without installing (npx-like)
 dotnet install setup             # configure PATH + DOTNET_TOOL_BIN
 dotnet install env               # print environment info
 dotnet install completion        # shell completion setup
@@ -154,9 +150,10 @@ dotnet install completion        # shell completion setup
 - **Bare vs explicit**: bare positional args prompt to
   confirm remote sources (NuGet/GitHub); explicit flags
   (`--package`, `--github`) skip all prompts
-- **Roll-forward**: remote installs (NuGet) auto-enable
-  roll-forward; local installs prompt the user
-  (`--allow-roll-forward` suppresses)
+- **Single-file only**: only single-file native executables
+  install (Native AOT or self-contained single-file / CLI
+  tools v2). Managed or multi-file tools are refused with a
+  pointer to `dotnet tool install`
 - **SDK preflight**: building from source checks for the
   .NET SDK before `dotnet publish` and suggests
   `--package` as the SDK-free alternative
@@ -171,7 +168,7 @@ dotnet build src/dotnet-install/dotnet-install.csproj
 dotnet run --project src/dotnet-install/dotnet-install.csproj -- <args>
 
 # Tests
-dotnet run --project test/dotnet-install.Tests
+dotnet test test/dotnet-install.Tests/dotnet-install.Tests.csproj
 ```
 
 ## When modifying the tool
@@ -186,9 +183,9 @@ dotnet run --project test/dotnet-install.Tests
   `GitSource.cs`)
 - Error messages: `"error: <message>"` to stderr
 - Status messages to stdout
-- Single-file (AOT) binaries go directly in install dir;
-  multi-file (managed) go in `_<appname>/` with a
-  symlink (Unix) or `.cmd` shim (Windows)
+- Only single-file (AOT or self-contained single-file)
+  binaries install, placed directly in the install dir;
+  managed/multi-file tools are refused (use `dotnet tool install`)
 - Git repos cached at `~/.nuget/git-tools/<owner>/<repo>/`
 - Project discovery order: `--project` > manifest >
   auto-detect Exe > file-based apps (≤12 → selector)

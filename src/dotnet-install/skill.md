@@ -6,9 +6,13 @@ description: >
 
 # dotnet-install
 
-Install .NET executables to PATH — like `cargo install`
+Install .NET **single-file executables** to PATH — like `cargo install`
 and `go install`. Build from source, install from NuGet,
 or clone from GitHub.
+
+Only single-file native executables (Native AOT or self-contained
+single-file, i.e. CLI tools v2) are supported. For managed or multi-file
+tools, use `dotnet tool install` with the .NET SDK.
 
 ## Install sources
 
@@ -67,7 +71,6 @@ dotnet-install update [tool]     # update one or all tools
 dotnet-install search <query>    # search NuGet
 dotnet-install info <tool>       # show tool details
 dotnet-install outdated          # check for newer versions
-dotnet-install run <pkg> [args]  # run without installing
 dotnet-install doctor            # diagnose PATH and config
 dotnet-install env               # print environment info
 dotnet-install completion <sh>   # shell completion setup
@@ -103,7 +106,8 @@ source "$HOME/.dotnet/bin/env.fish" # fish
   uninstall and reinstall.
 - Building from source requires the .NET SDK;
   `--package` works without the SDK.
-- NuGet installs auto-enable roll-forward if the
-  tool targets an older runtime.
+- Only single-file executables install. Managed or
+  multi-file tools are refused with a pointer to
+  `dotnet tool install`.
 - `--require-sourcelink` enforces SourceLink metadata
   in installed assemblies.

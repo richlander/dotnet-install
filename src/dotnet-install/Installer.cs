@@ -31,9 +31,24 @@ static class Installer
         }
 
         string appName = info.AssemblyName;
-        string mode = info.IsNativeAot ? "Native AOT" :
-                      info.IsSelfContained ? "self-contained" :
-                      info.IsSingleFile ? "single-file" : "framework-dependent";
+
+        // This tool installs only single-file executables. A project must opt into
+        // Native AOT or self-contained single-file publishing; anything else is a
+        // managed/multi-file tool and belongs to `dotnet tool install`.
+        if (!info.IsNativeAot && !info.IsSingleFile)
+        {
+            Console.Error.WriteLine($"error: '{appName}' is not a single-file executable project.");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("dotnet-install only installs single-file native executables. Set one of:");
+            Console.Error.WriteLine("  <PublishAot>true</PublishAot>");
+            Console.Error.WriteLine("  <PublishSingleFile>true</PublishSingleFile> with <SelfContained>true</SelfContained>");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Or install it as a managed .NET tool with the SDK:");
+            Console.Error.WriteLine("  dotnet tool install -g <package>");
+            return 1;
+        }
+
+        string mode = info.IsNativeAot ? "Native AOT" : "single-file";
 
         // Pre-flight: warn if the project's TFM may not be buildable
         if (info.TargetFramework is not null)
@@ -73,18 +88,17 @@ static class Installer
                 return 1;
             }
 
-            // 5. Detect single-file vs multi-file and place
-            bool singleFile = IsSingleFile(tempDir);
-            Directory.CreateDirectory(installDir);
+            // 5. Verify the publish produced a single file and place it
+            if (!IsSingleFile(tempDir))
+            {
+                Console.Error.WriteLine($"error: publishing '{appName}' produced multiple files, not a single executable.");
+                Console.Error.WriteLine("Enable <PublishAot>true</PublishAot> or <PublishSingleFile>true</PublishSingleFile>,");
+                Console.Error.WriteLine("or install it as a managed .NET tool: dotnet tool install -g <package>");
+                return 1;
+            }
 
-            if (singleFile)
-            {
-                PlaceSingleFile(execPath, installDir, execName);
-            }
-            else
-            {
-                PlaceMultiFile(tempDir, installDir, appName, execName);
-            }
+            Directory.CreateDirectory(installDir);
+            PlaceSingleFile(execPath, installDir, execName);
 
             // Write install metadata (for update tracking)
             if (source is not null)
@@ -94,10 +108,8 @@ static class Installer
                 ToolMetadata.Write(metaDir, new ToolManifest { Source = source, Update = update });
             }
 
-            string display = singleFile ? execName :
-                             OperatingSystem.IsWindows() ? $"{appName}.cmd" : execName;
             if (!quiet)
-                Console.WriteLine($"Installed {appName} → {Path.Combine(installDir, display)}");
+                Console.WriteLine($"Installed {appName} → {Path.Combine(installDir, execName)}");
 
             return 0;
         }
@@ -114,7 +126,7 @@ static class Installer
 
     // ---- Package install ----
 
-    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir, bool allowRollForward = false, bool requireSourceLink = false, bool quiet = false)
+    public static async Task<int> InstallPackageAsync(string packageSpec, string installDir, bool requireSourceLink = false, bool quiet = false)
     {
         // Parse name[@version]
         var parsed = PackageExtractor.ParsePackageReference(packageSpec);
@@ -197,7 +209,7 @@ static class Installer
             if (ridPackageId is not null)
             {
                 // Redirect — the RID-specific package prints its own verification
-                return await InstallPackageAsync($"{ridPackageId}@{version}", installDir, allowRollForward, requireSourceLink);
+                return await InstallPackageAsync($"{ridPackageId}@{version}", installDir, requireSourceLink);
             }
 
             // Verify signature from extracted .signature.p7s
@@ -240,91 +252,39 @@ static class Installer
 
             Directory.CreateDirectory(installDir);
 
-            // Check if the tool directory contains a native executable
+            // Only single-file native executables are supported (CLI tools v2).
+            // Managed (.dll) tools and multi-file layouts belong to `dotnet tool install`.
             string nativeExecName = OperatingSystem.IsWindows() ? $"{commandName}.exe" : commandName;
             string nativeExecPath = Path.Combine(toolDir, nativeExecName);
-            bool isNative = File.Exists(nativeExecPath) && !File.Exists(Path.Combine(toolDir, $"{commandName}.dll"));
+            bool isNativeSingleFile = File.Exists(nativeExecPath)
+                && !File.Exists(Path.Combine(toolDir, $"{commandName}.dll"))
+                && IsSingleFile(toolDir);
 
-            if (isNative && IsSingleFile(toolDir))
+            if (!isNativeSingleFile)
             {
-                // Native single-file: place directly
-                PlaceSingleFile(nativeExecPath, installDir, nativeExecName);
-
-                // Write install metadata for update tracking
-                string metaDir = Path.Combine(installDir, $"_{commandName}");
-                Directory.CreateDirectory(metaDir);
-                ToolMetadata.Write(metaDir, new ToolManifest
-                {
-                    Source = new InstallSource
-                    {
-                        Type = "nuget",
-                        Package = packageName,
-                        Version = version
-                    }
-                });
+                Console.Error.WriteLine($"error: '{packageName}' is not a single-file executable tool.");
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("dotnet-install only installs single-file native tools (CLI tools v2).");
+                Console.Error.WriteLine("Install this managed tool with the .NET SDK instead:");
+                Console.Error.WriteLine($"  dotnet tool install -g {packageName}");
+                return 1;
             }
-            else
+
+            // Native single-file: place directly
+            PlaceSingleFile(nativeExecPath, installDir, nativeExecName);
+
+            // Write install metadata for update tracking
+            string metaDir = Path.Combine(installDir, $"_{commandName}");
+            Directory.CreateDirectory(metaDir);
+            ToolMetadata.Write(metaDir, new ToolManifest
             {
-                // Managed or multi-file: copy tool directory, create launcher
-                string appDir = Path.Combine(installDir, $"_{commandName}");
-                if (Directory.Exists(appDir))
-                    Directory.Delete(appDir, true);
-
-                CopyDirectory(toolDir, appDir);
-
-                if (isNative)
+                Source = new InstallSource
                 {
-                    // Native multi-file: symlink/shim to the executable
-                    CreateLink(installDir, appDir, commandName, nativeExecName);
+                    Type = "nuget",
+                    Package = packageName,
+                    Version = version
                 }
-                else
-                {
-                    // Managed tool: check runtime compat, write metadata, create host symlink
-                    string entryDll = toolInfo.EntryPoint;
-                    string? runtimeConfigPath = FindRuntimeConfig(appDir, commandName);
-
-                    if (runtimeConfigPath is not null)
-                    {
-                        var compat = RuntimeCompat.CheckCompatibility(runtimeConfigPath);
-                        if (!compat.CanRun)
-                        {
-                            if (compat.RollForwardWouldHelp && !allowRollForward)
-                            {
-                                // Remote packages auto-enable roll-forward
-                                allowRollForward = true;
-                                if (!quiet)
-                                    Console.WriteLine($"Enabled roll-forward ({commandName} requires .NET {compat.RequiredVersion})");
-                            }
-
-                            if (!compat.RollForwardWouldHelp)
-                            {
-                                Console.Error.WriteLine($"error: {commandName} requires {compat.RequiredFramework} {compat.RequiredVersion} which is not installed.");
-                                Console.Error.WriteLine();
-                                Console.Error.WriteLine("To resolve this:");
-                                Console.Error.WriteLine($"  Install .NET {compat.RequiredVersion}: https://dot.net/download");
-                                return 1;
-                            }
-
-                            // allowRollForward is true and roll-forward would help — proceed
-                        }
-                    }
-
-                    // Write tool metadata sidecar
-                    ToolMetadata.Write(appDir, new ToolManifest
-                    {
-                        EntryPoint = entryDll,
-                        RollForward = allowRollForward,
-                        Source = new InstallSource
-                        {
-                            Type = "nuget",
-                            Package = packageName,
-                            Version = version
-                        }
-                    });
-
-                    CreateManagedLauncher(installDir, appDir, commandName, entryDll, allowRollForward);
-                }
-            }
+            });
 
             string versionDisplay = version is not null ? $" ({version})" : "";
             if (!quiet) Console.WriteLine($"Installed {commandName}{versionDisplay} → {Path.Combine(installDir, commandName)}");
@@ -446,75 +406,6 @@ static class Installer
 
         fallbacks.Add("any");
         return fallbacks;
-    }
-
-    static void CreateManagedLauncher(string installDir, string appDir, string commandName, string entryDll, bool rollForward)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            // Windows: .cmd shim that delegates to dotnet-install in host mode
-            string shimPath = Path.Combine(installDir, $"{commandName}.cmd");
-            string dotnetInstallPath = Environment.ProcessPath ?? "dotnet-install";
-            File.WriteAllText(shimPath, $"""@"{dotnetInstallPath}" --host {commandName} %*{"\r\n"}""");
-        }
-        else
-        {
-            // Unix: symlink to dotnet-install binary (BusyBox model)
-            string linkPath = Path.Combine(installDir, commandName);
-            if (File.Exists(linkPath) || IsSymlink(linkPath))
-                File.Delete(linkPath);
-
-            // Symlink to local dotnet-install. If it doesn't exist yet (e.g. first tool
-            // install via dotnet tool), HostDispatch's fallback to DefaultInstallDir
-            // handles runtime dispatch. Running `setup` completes the graduation.
-            string localHost = Path.Combine(installDir, "dotnet-install");
-            if (File.Exists(localHost))
-            {
-                File.CreateSymbolicLink(linkPath, "dotnet-install");
-            }
-            else
-            {
-                // No local binary yet — create absolute symlink to ProcessPath as interim.
-                // `setup` will replace this with a proper local install.
-                string hostPath = Environment.ProcessPath
-                    ?? Path.Combine(installDir, "dotnet-install");
-                File.CreateSymbolicLink(linkPath, hostPath);
-                Console.WriteLine();
-                Console.WriteLine("  hint: run 'dotnet-install setup' to complete installation");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Find the runtimeconfig.json for a tool in its app directory.
-    /// </summary>
-    static string? FindRuntimeConfig(string appDir, string commandName)
-    {
-        // Try exact name first, then search
-        string exact = Path.Combine(appDir, $"{commandName}.runtimeconfig.json");
-        if (File.Exists(exact)) return exact;
-
-        var configs = Directory.GetFiles(appDir, "*.runtimeconfig.json");
-        return configs.Length > 0 ? configs[0] : null;
-    }
-
-    static void CreateLink(string installDir, string appDir, string appName, string execName)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            string shimPath = Path.Combine(installDir, $"{appName}.cmd");
-            File.WriteAllText(shimPath, $"""@"%~dp0\_{appName}\{execName}" %*{"\r\n"}""");
-        }
-        else
-        {
-            string linkPath = Path.Combine(installDir, execName);
-            if (File.Exists(linkPath) || IsSymlink(linkPath))
-                File.Delete(linkPath);
-
-            File.CreateSymbolicLink(linkPath, Path.Combine($"_{appName}", execName));
-        }
-
-        SetExecutable(Path.Combine(appDir, execName));
     }
 
     // ---- Project evaluation ----
@@ -649,26 +540,61 @@ static class Installer
         if (!Version.TryParse(versionPart, out var tfmVersion))
             return;
 
-        // Get installed SDK version
-        var runtimes = RuntimeCompat.GetInstalledRuntimes();
-        var highestRuntime = runtimes
-            .Where(r => r.Name == "Microsoft.NETCore.App")
-            .Select(r =>
-            {
-                // Strip pre-release suffix (e.g. "11.0.0-preview.2.26159.112" → "11.0.0")
-                // Version.TryParse doesn't handle SemVer pre-release tags
-                string ver = r.Version;
-                int dash = ver.IndexOf('-');
-                if (dash > 0) ver = ver[..dash];
-                return Version.TryParse(ver, out var v) ? v : null;
-            })
-            .Where(v => v is not null)
-            .Max();
+        // Get the highest installed runtime major version via `dotnet --list-runtimes`
+        var highestRuntime = GetHighestInstalledRuntime();
 
         if (highestRuntime is not null && tfmVersion.Major > highestRuntime.Major)
         {
             Console.Error.WriteLine($"warning: project targets {tfm} but the highest installed runtime is {highestRuntime.Major}.{highestRuntime.Minor}");
             Console.Error.WriteLine($"The build will likely fail. Install .NET {tfmVersion}: https://dot.net/download");
+        }
+    }
+
+    /// <summary>
+    /// Highest installed Microsoft.NETCore.App runtime version, via `dotnet --list-runtimes`.
+    /// Returns null if dotnet is unavailable or no runtimes are reported.
+    /// </summary>
+    static Version? GetHighestInstalledRuntime()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("dotnet")
+            {
+                ArgumentList = { "--list-runtimes" },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            using var p = Process.Start(psi);
+            if (p is null) return null;
+            string output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+            if (p.ExitCode != 0) return null;
+
+            Version? highest = null;
+            foreach (string line in output.Split('\n'))
+            {
+                // Format: "Microsoft.NETCore.App 11.0.0-preview.2.26159.112 [/path/...]"
+                if (!line.StartsWith("Microsoft.NETCore.App ", StringComparison.Ordinal))
+                    continue;
+
+                string rest = line["Microsoft.NETCore.App ".Length..].TrimStart();
+                int space = rest.IndexOf(' ');
+                string ver = space > 0 ? rest[..space] : rest;
+
+                // Strip pre-release suffix (Version.TryParse doesn't handle SemVer tags)
+                int dash = ver.IndexOf('-');
+                if (dash > 0) ver = ver[..dash];
+
+                if (Version.TryParse(ver, out var v) && (highest is null || v > highest))
+                    highest = v;
+            }
+
+            return highest;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -778,38 +704,6 @@ static class Installer
         SetExecutable(dest);
     }
 
-    static void PlaceMultiFile(string publishDir, string installDir, string appName, string executableName)
-    {
-        string appDir = Path.Combine(installDir, $"_{appName}");
-
-        // Remove previous installation
-        if (Directory.Exists(appDir))
-            Directory.Delete(appDir, true);
-
-        // Move published output into _appname/ (faster than copy, avoids permission issues)
-        Directory.Move(publishDir, appDir);
-
-        if (OperatingSystem.IsWindows())
-        {
-            // Create a CMD shim: app.cmd → _app/app.exe
-            string shimPath = Path.Combine(installDir, $"{appName}.cmd");
-            File.WriteAllText(shimPath, $"""@"%~dp0\_{appName}\{executableName}" %*{"\r\n"}""");
-        }
-        else
-        {
-            // Create a relative symlink: app → _app/app
-            string linkPath = Path.Combine(installDir, executableName);
-
-            if (File.Exists(linkPath) || IsSymlink(linkPath))
-                File.Delete(linkPath);
-
-            string target = Path.Combine($"_{appName}", executableName);
-            File.CreateSymbolicLink(linkPath, target);
-        }
-
-        SetExecutable(Path.Combine(appDir, executableName));
-    }
-
     // ---- Helpers ----
 
     static void SetExecutable(string path)
@@ -842,16 +736,5 @@ static class Installer
         {
             Console.WriteLine($"Verified: {sigResult.Publisher ?? "signed"} ({sigResult.SignatureType})");
         }
-    }
-
-    static void CopyDirectory(string source, string destination)
-    {
-        Directory.CreateDirectory(destination);
-
-        foreach (var file in Directory.GetFiles(source))
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
-
-        foreach (var dir in Directory.GetDirectories(source))
-            CopyDirectory(dir, Path.Combine(destination, Path.GetFileName(dir)));
     }
 }

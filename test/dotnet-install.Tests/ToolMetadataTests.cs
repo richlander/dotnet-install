@@ -19,33 +19,44 @@ public class ToolMetadataTests : IDisposable
     }
 
     [Fact]
-    public void RoundTrip_PreservesAllFields()
+    public void RoundTrip_PreservesSource()
     {
         var original = new ToolManifest
         {
-            EntryPoint = "mytool.dll",
-            RollForward = true
+            Source = new InstallSource
+            {
+                Type = "nuget",
+                Package = "mytool",
+                Version = "1.2.3"
+            }
         };
 
         ToolMetadata.Write(_tempDir, original);
         var loaded = ToolMetadata.Read(_tempDir);
 
         Assert.NotNull(loaded);
-        Assert.Equal("mytool.dll", loaded.EntryPoint);
-        Assert.True(loaded.RollForward);
+        Assert.NotNull(loaded.Source);
+        Assert.Equal("nuget", loaded.Source.Type);
+        Assert.Equal("mytool", loaded.Source.Package);
+        Assert.Equal("1.2.3", loaded.Source.Version);
     }
 
     [Fact]
-    public void RoundTrip_DefaultRollForwardIsFalse()
+    public void RoundTrip_PreservesUpdateChannel()
     {
-        var original = new ToolManifest { EntryPoint = "app.dll" };
+        var original = new ToolManifest
+        {
+            Source = new InstallSource { Type = "github", Repository = "owner/repo" },
+            Update = new InstallSource { Type = "nuget", Package = "mytool", Version = "2.0.0" }
+        };
 
         ToolMetadata.Write(_tempDir, original);
         var loaded = ToolMetadata.Read(_tempDir);
 
         Assert.NotNull(loaded);
-        Assert.Equal("app.dll", loaded.EntryPoint);
-        Assert.False(loaded.RollForward);
+        Assert.Equal("github", loaded.Source?.Type);
+        Assert.Equal("nuget", loaded.Update?.Type);
+        Assert.Equal("2.0.0", loaded.Update?.Version);
     }
 
     [Fact]
@@ -72,25 +83,34 @@ public class ToolMetadataTests : IDisposable
     [Fact]
     public void Write_CreatesFileAtExpectedPath()
     {
-        ToolMetadata.Write(_tempDir, new ToolManifest { EntryPoint = "x.dll" });
+        ToolMetadata.Write(_tempDir, new ToolManifest
+        {
+            Source = new InstallSource { Type = "nuget", Package = "x" }
+        });
 
         string expectedPath = Path.Combine(_tempDir, ".tool.json");
         Assert.True(File.Exists(expectedPath));
 
         string content = File.ReadAllText(expectedPath);
-        Assert.Contains("\"entryPoint\"", content);
-        Assert.Contains("x.dll", content);
+        Assert.Contains("\"source\"", content);
+        Assert.Contains("\"package\"", content);
     }
 
     [Fact]
     public void Write_OverwritesExistingFile()
     {
-        ToolMetadata.Write(_tempDir, new ToolManifest { EntryPoint = "old.dll" });
-        ToolMetadata.Write(_tempDir, new ToolManifest { EntryPoint = "new.dll" });
+        ToolMetadata.Write(_tempDir, new ToolManifest
+        {
+            Source = new InstallSource { Type = "nuget", Package = "old" }
+        });
+        ToolMetadata.Write(_tempDir, new ToolManifest
+        {
+            Source = new InstallSource { Type = "nuget", Package = "new" }
+        });
 
         var loaded = ToolMetadata.Read(_tempDir);
         Assert.NotNull(loaded);
-        Assert.Equal("new.dll", loaded.EntryPoint);
+        Assert.Equal("new", loaded.Source?.Package);
     }
 
     [Fact]

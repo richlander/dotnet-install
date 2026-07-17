@@ -10,6 +10,10 @@ dotnet-install --package dotnetsay            # Install from NuGet
 dotnet-install --github richlander/my-tool    # Install from GitHub
 ```
 
+dotnet-install installs **single-file executables only** — Native AOT or
+self-contained single-file tools (CLI tools v2). For managed or multi-file
+tools, use `dotnet tool install` with the .NET SDK.
+
 ## Why not `dotnet tool install`?
 
 `dotnet tool install` requires the SDK, only installs from NuGet, and every
@@ -27,10 +31,6 @@ dotnet-install goes further:
   needed to find the executable
 - **Clean release build** — always does a publish-optimized build,
   just like `cargo install` and `go install`
-- **Run without installing** — `dotnet-install run dotnetsay`
-  executes a NuGet tool directly, like `dnx`
-- **Roll-forward at install** — prompts once if the tool needs
-  a newer runtime, instead of failing on first run
 - **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
   not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
 
@@ -90,18 +90,18 @@ dotnet-install --github richlander/dotnet-runtimeinfo
 ```bash
 $ dotnet-install ls
 NAME            TYPE
-dotnet-inspect  NAOT
-dotnet-install  NAOT
-dotnetsay       CoreCLR
+dotnet-inspect  single-file
+dotnet-install  single-file
+dotnetsay       single-file
 ```
 
 Use `--no-header` for scripting:
 
 ```bash
 $ dotnet-install ls --no-header
-dotnet-inspect  NAOT
-dotnet-install  NAOT
-dotnetsay       CoreCLR
+dotnet-inspect  single-file
+dotnet-install  single-file
+dotnetsay       single-file
 ```
 
 ### Update all tools
@@ -119,53 +119,38 @@ dotnetsay (dotnetsay 3.0.3)... up to date
 dotnet-install rm dotnetsay
 ```
 
-### Runtime roll-forward
+### Unsupported tools
 
-When installing a managed tool that targets a .NET version you don't
-have, dotnet-install will prompt to enable roll-forward:
-
-```bash
-$ dotnet-install --package dotnetsay@2.0.0
-dotnetsay requires .NET 2.1.0-preview2-26406-04 (not installed). Enable roll-forward? [Y/n] y
-Installed dotnetsay (2.0.0) → ~/.dotnet/bin/dotnetsay
-```
-
-Or pass `--allow-roll-forward` directly:
+dotnet-install only installs single-file native executables. If a NuGet
+package is a managed (multi-file) tool, or a source build doesn't produce a
+single file, it stops and points you at the SDK:
 
 ```bash
-dotnet-install --package dotnetsay@2.0.0 --allow-roll-forward
+$ dotnet-install --package some-managed-tool
+error: 'some-managed-tool' is not a single-file executable tool.
+
+dotnet-install only installs single-file native tools (CLI tools v2).
+Install this managed tool with the .NET SDK instead:
+  dotnet tool install -g some-managed-tool
 ```
 
 ## How it works
 
-### Single-file apps (Native AOT / PublishSingleFile)
-
-The binary is placed directly — identical to Rust/Go:
+Every tool is a single-file native executable, placed directly on PATH —
+identical to Rust/Go. A small metadata sidecar tracks the install source
+for updates:
 
 ```text
 ~/.dotnet/bin/
   mytool              # just the binary
-```
-
-### Managed apps (CoreCLR)
-
-A subdirectory holds the files. A symlink to `dotnet-install` on
-PATH enables **BusyBox dispatch** — the tool name is detected from
-`argv[0]` and routed to `dotnet exec` with the correct entry point
-and roll-forward settings:
-
-```text
-~/.dotnet/bin/
-  dotnetsay → dotnet-install   # symlink (BusyBox dispatch)
-  _dotnetsay/                  # actual files
-    dotnetsay.dll
-    .tool.json                 # entry point + roll-forward config
-    ...
+  _mytool/
+    .tool.json        # install source (for `update`)
 ```
 
 ## Project configuration
 
-No new properties required. Existing MSBuild properties control the output:
+No new properties required, but the project must produce a single-file
+executable. Enable Native AOT or self-contained single-file publishing:
 
 ```xml
 <!-- Native AOT (recommended — produces a single native binary) -->
@@ -174,10 +159,10 @@ No new properties required. Existing MSBuild properties control the output:
 <!-- OR single-file CoreCLR -->
 <PublishSingleFile>true</PublishSingleFile>
 <SelfContained>true</SelfContained>
-
-<!-- OR plain executable (multi-file, uses BusyBox dispatch) -->
-<OutputType>Exe</OutputType>
 ```
+
+Managed or multi-file tools aren't supported here — install those with
+`dotnet tool install`.
 
 ## Commands and options
 
@@ -196,7 +181,6 @@ Options:
   --project <path>             Path to .csproj within a git repo
   -o, --output <dir>           Installation directory (default: ~/.dotnet/bin/)
   --local-bin                  Install to ~/.local/bin/
-  --allow-roll-forward         Allow tool to run on a newer .NET runtime
   --require-sourcelink         Require SourceLink metadata
   --ssh                        Clone using SSH instead of HTTPS
   --no-header                  Suppress column headers (list command)

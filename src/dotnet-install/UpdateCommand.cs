@@ -113,7 +113,7 @@ static class UpdateCommand
 
         Console.WriteLine($"{installedVersion} -> {latestVersion}");
         int result = await Installer.InstallPackageAsync(
-            $"{packageName}@{latestVersion}", installDir, tool.Manifest.RollForward, quiet: true);
+            $"{packageName}@{latestVersion}", installDir, quiet: true);
 
         // Preserve the update plan in metadata (InstallPackageAsync wrote source only)
         if (result == 0 && tool.Manifest.Update is not null)
