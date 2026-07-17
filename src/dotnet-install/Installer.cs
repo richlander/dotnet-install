@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Xml.Linq;
 using System.Runtime.InteropServices;
 using NuGetFetch;
@@ -35,7 +36,7 @@ static class Installer
         // This tool installs only single-file executables. A project must opt into
         // Native AOT or self-contained single-file publishing; anything else is a
         // managed/multi-file tool and belongs to `dotnet tool install`.
-        if (!info.IsNativeAot && !info.IsSingleFile)
+        if (!info.IsNativeAot && !(info.IsSingleFile && info.IsSelfContained))
         {
             Console.Error.WriteLine($"error: '{appName}' is not a single-file executable project.");
             Console.Error.WriteLine();
@@ -419,6 +420,82 @@ static class Installer
         if (IsFileBasedApp(projectFile))
             return EvaluateFileBasedApp(projectFile);
 
+        // Prefer fully-evaluated MSBuild properties so imported props
+        // (Directory.Build.props, SDK defaults, RID-conditioned values) are
+        // honored. Fall back to raw XML parsing if the SDK query fails.
+        return TryEvaluateWithMsBuild(projectFile)
+            ?? EvaluateProjectFromXml(projectFile);
+    }
+
+    /// <summary>
+    /// Evaluates a project's effective properties by asking the SDK
+    /// (`dotnet msbuild -getProperty:...`). Returns null if the query fails.
+    /// </summary>
+    static ProjectInfo? TryEvaluateWithMsBuild(string projectFile)
+    {
+        try
+        {
+            string rid = RuntimeInformation.RuntimeIdentifier;
+            var psi = new ProcessStartInfo("dotnet")
+            {
+                ArgumentList =
+                {
+                    "msbuild", Path.GetFullPath(projectFile),
+                    "-getProperty:AssemblyName",
+                    "-getProperty:OutputType",
+                    "-getProperty:PublishAot",
+                    "-getProperty:PublishSingleFile",
+                    "-getProperty:SelfContained",
+                    "-getProperty:TargetFramework",
+                    "-p:Configuration=Release",
+                    $"-p:RuntimeIdentifier={rid}",
+                },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            using var p = Process.Start(psi);
+            if (p is null) return null;
+            string output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+            if (p.ExitCode != 0) return null;
+
+            using var doc = JsonDocument.Parse(output);
+            if (!doc.RootElement.TryGetProperty("Properties", out var props))
+                return null;
+
+            static string Get(JsonElement props, string name) =>
+                props.TryGetProperty(name, out var v) ? (v.GetString() ?? string.Empty) : string.Empty;
+            static bool IsTrue(JsonElement props, string name) =>
+                string.Equals(Get(props, name), "true", StringComparison.OrdinalIgnoreCase);
+
+            string assemblyName = Get(props, "AssemblyName");
+            if (string.IsNullOrEmpty(assemblyName))
+                assemblyName = Path.GetFileNameWithoutExtension(projectFile);
+
+            string outputType = Get(props, "OutputType");
+            if (string.IsNullOrEmpty(outputType))
+                return null;
+
+            string tfm = Get(props, "TargetFramework");
+
+            return new ProjectInfo(
+                AssemblyName: assemblyName,
+                OutputType: outputType,
+                IsNativeAot: IsTrue(props, "PublishAot"),
+                IsSingleFile: IsTrue(props, "PublishSingleFile"),
+                IsSelfContained: IsTrue(props, "SelfContained"),
+                TargetFramework: string.IsNullOrEmpty(tfm) ? null : tfm
+            );
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static ProjectInfo EvaluateProjectFromXml(string projectFile)
+    {
         var doc = XDocument.Load(projectFile);
         var props = doc.Descendants()
             .Where(e => e.Parent?.Name.LocalName == "PropertyGroup");
@@ -676,16 +753,31 @@ static class Installer
 
     // ---- Detection ----
 
-    static bool IsSingleFile(string publishDir)
+    internal static bool IsSingleFile(string publishDir)
     {
-        // Single-file = only one significant file (ignoring debug symbols and tool metadata)
-        var files = Directory.GetFiles(publishDir)
-            .Where(f => !f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
-                      && !f.EndsWith(".dbg", StringComparison.OrdinalIgnoreCase)
-                      && !Path.GetFileName(f).Equals("DotnetToolSettings.xml", StringComparison.OrdinalIgnoreCase))
+        // Single-file = only one significant file. Recurse so a nested payload
+        // (e.g. lib/dependency.so) is not mistaken for a self-contained
+        // single-file publish, but ignore debug symbols (.pdb/.dbg, macOS
+        // .dSYM bundles) and tool metadata.
+        var files = Directory.GetFiles(publishDir, "*", SearchOption.AllDirectories)
+            .Where(f => !IsIgnoredPublishArtifact(publishDir, f))
             .ToList();
 
         return files.Count == 1;
+    }
+
+    static bool IsIgnoredPublishArtifact(string publishDir, string file)
+    {
+        string name = Path.GetFileName(file);
+        if (name.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".dbg", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("DotnetToolSettings.xml", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Ignore anything inside a macOS .dSYM debug-symbols bundle.
+        string rel = Path.GetRelativePath(publishDir, file);
+        return rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(seg => seg.EndsWith(".dSYM", StringComparison.OrdinalIgnoreCase));
     }
 
     // ---- Placement ----
