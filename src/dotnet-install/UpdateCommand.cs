@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Formats.Tar;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using NuGetFetch;
 
@@ -321,25 +323,8 @@ static class UpdateCommand
             string extractDir = Path.Combine(tempDir, "extract");
             Directory.CreateDirectory(extractDir);
 
-            if (isWindows)
-            {
-                System.IO.Compression.ZipFile.ExtractToDirectory(archivePath, extractDir);
-            }
-            else
-            {
-                var psi = new ProcessStartInfo("tar", ["-xzf", archivePath, "-C", extractDir])
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                };
-                using var p = Process.Start(psi)!;
-                p.WaitForExit();
-                if (p.ExitCode != 0)
-                {
-                    Console.Error.WriteLine($"  extract failed");
-                    return 1;
-                }
-            }
+            if (!TryExtractReleaseArchive(archivePath, extractDir, isWindows))
+                return 1;
 
             // Enforce the single-file contract, matching the install path: the
             // release asset must contain exactly one self-contained executable.
@@ -413,6 +398,35 @@ static class UpdateCommand
     // ---- Release payload validation ----
 
     internal enum ReleasePayloadStatus { Ok, NotSingleFile, BinaryNotFound }
+
+    /// <summary>
+    /// Extracts a downloaded release archive into <paramref name="extractDir"/> using
+    /// managed APIs (ZipFile / TarFile) that reject entries escaping the destination
+    /// directory (zip-slip / tar-slip), unlike shelling out to <c>tar</c>. Returns false
+    /// and writes a message to stderr on failure.
+    /// </summary>
+    internal static bool TryExtractReleaseArchive(string archivePath, string extractDir, bool isWindows)
+    {
+        try
+        {
+            if (isWindows)
+            {
+                ZipFile.ExtractToDirectory(archivePath, extractDir);
+            }
+            else
+            {
+                using var archiveFile = File.OpenRead(archivePath);
+                using var gzip = new GZipStream(archiveFile, CompressionMode.Decompress);
+                TarFile.ExtractToDirectory(gzip, extractDir, overwriteFiles: true);
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"  extract failed: {ex.Message}");
+            return false;
+        }
+    }
 
     /// <summary>
     /// Validates that an extracted github-release asset satisfies the single-file
