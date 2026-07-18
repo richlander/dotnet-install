@@ -57,12 +57,15 @@ static class RemoveCommand
 
     static string[] FindEntries(string installDir, string name)
     {
-        // On Windows a tool may be installed as <name>.exe with a legacy <name>.cmd
-        // shim beside it, so clean up every variant. On Unix the command name is used
-        // verbatim, and <name>.exe / <name>.cmd would be unrelated tools — only the
-        // exact entry (or its dangling legacy symlink) is ours to remove.
+        // On Windows a tool is installed as <name>.exe, possibly with a legacy
+        // <name>.cmd shim beside it — those are the only launcher forms, so clean up
+        // both. A bare extensionless top-level launcher is never produced on Windows,
+        // so it is deliberately excluded (including it could conflate two distinct
+        // tools whose names differ only by an .exe/.cmd suffix). On Unix the command
+        // name is used verbatim, and <name>.exe / <name>.cmd would be unrelated tools,
+        // so only the exact entry (or its dangling legacy symlink) is ours to remove.
         string[] candidates = OperatingSystem.IsWindows()
-            ? [name, name + ".exe", name + ".cmd"]
+            ? [name + ".exe", name + ".cmd"]
             : [name];
 
         var found = new List<string>();
