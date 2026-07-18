@@ -313,6 +313,10 @@ static class Installer
     /// The command name (what the user types) can differ from the executable file name,
     /// so resolving by command name alone would falsely reject otherwise-valid packages.
     /// Returns the full path to the executable, or null if none is found.
+    ///
+    /// EntryPoint is package-controlled, so any candidate that is rooted or escapes
+    /// <paramref name="toolDir"/> (e.g. "../../etc/passwd") is rejected to prevent a
+    /// malicious package from copying an arbitrary host file into the install directory.
     /// </summary>
     internal static string? ResolveEntryExecutable(string toolDir, ToolSettings info)
     {
@@ -335,14 +339,37 @@ static class Installer
             candidates.Add(OperatingSystem.IsWindows() ? $"{info.CommandName}.exe" : info.CommandName);
         }
 
+        string toolDirFull = Path.GetFullPath(toolDir);
         foreach (string candidate in candidates)
         {
-            string path = Path.Combine(toolDir, candidate);
+            // Reject rooted paths outright; they always escape toolDir.
+            if (Path.IsPathRooted(candidate))
+                continue;
+
+            string path = Path.GetFullPath(Path.Combine(toolDirFull, candidate));
+            if (!IsWithinDirectory(toolDirFull, path))
+                continue;
+
             if (File.Exists(path))
                 return path;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="candidateFull"/> (an already fully-qualified path)
+    /// is the directory itself or lies beneath <paramref name="dirFull"/>.
+    /// </summary>
+    static bool IsWithinDirectory(string dirFull, string candidateFull)
+    {
+        if (string.Equals(candidateFull, dirFull, StringComparison.Ordinal))
+            return true;
+
+        string dirWithSep = dirFull.EndsWith(Path.DirectorySeparatorChar)
+            ? dirFull
+            : dirFull + Path.DirectorySeparatorChar;
+        return candidateFull.StartsWith(dirWithSep, StringComparison.Ordinal);
     }
 
     /// <summary>

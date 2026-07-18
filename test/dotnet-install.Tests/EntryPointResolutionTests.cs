@@ -87,4 +87,45 @@ public class EntryPointResolutionTests : IDisposable
 
         Assert.Equal(Path.Combine(_tempDir, "mytool.dll"), resolved);
     }
+
+    [Fact]
+    public void RejectsAbsoluteEntryPoint_OutsideToolDir()
+    {
+        // Package-controlled EntryPoint must not escape the extracted package.
+        string outside = Path.Combine(Path.GetTempPath(), $"outside-{Path.GetRandomFileName()}");
+        File.WriteAllText(outside, "host secret");
+        try
+        {
+            var info = new Installer.ToolSettings("mytool", outside, "executable", _tempDir);
+            var resolved = Installer.ResolveEntryExecutable(_tempDir, info);
+
+            Assert.Null(resolved);
+        }
+        finally
+        {
+            try { File.Delete(outside); } catch { }
+        }
+    }
+
+    [Fact]
+    public void RejectsTraversalEntryPoint_OutsideToolDir()
+    {
+        // A "../"-style EntryPoint that resolves outside toolDir must be rejected,
+        // even if the target file exists.
+        string parent = Directory.GetParent(_tempDir)!.FullName;
+        string siblingName = $"escape-{Path.GetRandomFileName()}";
+        string sibling = Path.Combine(parent, siblingName);
+        File.WriteAllText(sibling, "host secret");
+        try
+        {
+            var info = new Installer.ToolSettings("mytool", Path.Combine("..", siblingName), "executable", _tempDir);
+            var resolved = Installer.ResolveEntryExecutable(_tempDir, info);
+
+            Assert.Null(resolved);
+        }
+        finally
+        {
+            try { File.Delete(sibling); } catch { }
+        }
+    }
 }
