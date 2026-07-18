@@ -90,6 +90,11 @@ public class InstallLayoutTests : IDisposable
     [Fact]
     public void Remove_CleansAllLauncherVariantsAndPayload()
     {
+        // Windows-only: a legacy .cmd shim left next to a newer .exe. On Unix, .exe
+        // and .cmd would be unrelated tools, so variant cleanup is Windows-scoped.
+        if (!OperatingSystem.IsWindows())
+            return;
+
         // A legacy .cmd shim left next to a newer .exe: both must be removed.
         File.WriteAllText(Path.Combine(_installDir, "mytool.exe"), "");
         File.WriteAllText(Path.Combine(_installDir, "mytool.cmd"), "@echo off");
@@ -103,6 +108,25 @@ public class InstallLayoutTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_installDir, "mytool.exe")));
         Assert.False(File.Exists(Path.Combine(_installDir, "mytool.cmd")));
         Assert.False(Directory.Exists(appDir));
+    }
+
+    [Fact]
+    public void Remove_OnUnix_DoesNotTouchExtensionSiblings()
+    {
+        // On Unix, foo.exe / foo.cmd are unrelated tools; removing foo must not delete them.
+        if (OperatingSystem.IsWindows())
+            return;
+
+        File.WriteAllText(Path.Combine(_installDir, "mytool"), "");
+        File.WriteAllText(Path.Combine(_installDir, "mytool.exe"), "");
+        File.WriteAllText(Path.Combine(_installDir, "mytool.cmd"), "");
+
+        int rc = RemoveCommand.Run(_installDir, ["mytool"]);
+
+        Assert.Equal(0, rc);
+        Assert.False(File.Exists(Path.Combine(_installDir, "mytool")));
+        Assert.True(File.Exists(Path.Combine(_installDir, "mytool.exe")));
+        Assert.True(File.Exists(Path.Combine(_installDir, "mytool.cmd")));
     }
 
     [Fact]
