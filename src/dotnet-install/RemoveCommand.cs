@@ -53,18 +53,22 @@ static class RemoveCommand
 
     static string? FindEntry(string installDir, string name)
     {
-        // Direct match
-        string path = Path.Combine(installDir, name);
-        if (File.Exists(path)) return path;
-
-        // With .exe
-        path = Path.Combine(installDir, name + ".exe");
-        if (File.Exists(path)) return path;
-
-        // With .cmd (Windows shim)
-        path = Path.Combine(installDir, name + ".cmd");
-        if (File.Exists(path)) return path;
+        foreach (string candidate in new[] { name, name + ".exe", name + ".cmd" })
+        {
+            string path = Path.Combine(installDir, candidate);
+            // File.Exists follows symlinks, so a legacy launcher whose target is
+            // already gone would be missed; match it as a link entry directly so
+            // its stale _<name>/ payload can still be cleaned up.
+            if (File.Exists(path) || IsSymlink(path))
+                return path;
+        }
 
         return null;
+    }
+
+    static bool IsSymlink(string path)
+    {
+        try { return new FileInfo(path).LinkTarget is not null; }
+        catch { return false; }
     }
 }

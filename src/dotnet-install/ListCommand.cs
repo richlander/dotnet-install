@@ -63,8 +63,8 @@ static class ListCommand
 
     static string GetToolType(FileInfo f, string installDir)
     {
-        // All installed tools are single-file native executables.
-        return "single-file";
+        string toolName = Path.GetFileNameWithoutExtension(f.Name);
+        return InstallLayout.ClassifyType(installDir, toolName, f);
     }
 
     static ToolManifest? ReadManifest(FileInfo f, string installDir)

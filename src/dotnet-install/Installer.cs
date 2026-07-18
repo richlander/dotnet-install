@@ -105,7 +105,7 @@ static class Installer
             if (source is not null)
             {
                 string metaDir = Path.Combine(installDir, $"_{appName}");
-                Directory.CreateDirectory(metaDir);
+                ResetMetadataDirectory(metaDir);
                 ToolMetadata.Write(metaDir, new ToolManifest { Source = source, Update = update });
             }
 
@@ -293,7 +293,7 @@ static class Installer
 
             // Write install metadata for update tracking
             string metaDir = Path.Combine(installDir, $"_{commandName}");
-            Directory.CreateDirectory(metaDir);
+            ResetMetadataDirectory(metaDir);
             ToolMetadata.Write(metaDir, new ToolManifest
             {
                 Source = new InstallSource
@@ -908,6 +908,16 @@ static class Installer
     }
 
     // ---- Helpers ----
+
+    static void ResetMetadataDirectory(string metaDir)
+    {
+        // A pre-redesign managed install left DLLs and a runtimeconfig in this same
+        // _<name>/ directory. Clearing it first means a reinstall over a legacy
+        // layout leaves only fresh single-file metadata, with no stale payload.
+        if (Directory.Exists(metaDir))
+            Directory.Delete(metaDir, recursive: true);
+        Directory.CreateDirectory(metaDir);
+    }
 
     static void SetExecutable(string path)
     {
