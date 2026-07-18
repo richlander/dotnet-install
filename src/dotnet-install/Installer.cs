@@ -244,6 +244,15 @@ static class Installer
             string commandName = toolInfo.CommandName;
             string toolDir = toolInfo.ToolDirectory;
 
+            // CommandName is package-controlled and is used to name the installed binary
+            // and its metadata directory. Reject anything that isn't a plain file name so
+            // a package cannot escape installDir (e.g. Name="../../victim").
+            if (!IsSafeFileName(commandName))
+            {
+                Console.Error.WriteLine($"error: package declares an invalid command name '{commandName}'.");
+                return 1;
+            }
+
             // SourceLink verification (before placement)
             if (requireSourceLink && !SourceLinkCheck.Verify(toolDir))
             {
@@ -255,10 +264,16 @@ static class Installer
 
             // Only single-file native executables are supported (CLI tools v2).
             // Managed (.dll) tools and multi-file layouts belong to `dotnet tool install`.
-            string nativeExecName = OperatingSystem.IsWindows() ? $"{commandName}.exe" : commandName;
-            string nativeExecPath = Path.Combine(toolDir, nativeExecName);
-            bool isNativeSingleFile = File.Exists(nativeExecPath)
-                && !File.Exists(Path.Combine(toolDir, $"{commandName}.dll"))
+            //
+            // Locate the payload via the EntryPoint declared in DotnetToolSettings.xml.
+            // EntryPoint names the actual file to run, which can differ from the command
+            // name the user types; resolving by command name alone falsely rejects such
+            // packages.
+            string? entryExecPath = ResolveEntryExecutable(toolDir, toolInfo);
+            bool isManaged = string.Equals(toolInfo.Runner, "dotnet", StringComparison.OrdinalIgnoreCase)
+                || (entryExecPath is not null && entryExecPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+            bool isNativeSingleFile = entryExecPath is not null
+                && !isManaged
                 && IsSingleFile(toolDir);
 
             if (!isNativeSingleFile)
@@ -271,8 +286,10 @@ static class Installer
                 return 1;
             }
 
-            // Native single-file: place directly
-            PlaceSingleFile(nativeExecPath, installDir, nativeExecName);
+            // Place under the command name so the tool resolves on PATH as the user
+            // expects, even when the packaged executable file name differs.
+            string installedExecName = OperatingSystem.IsWindows() ? $"{commandName}.exe" : commandName;
+            PlaceSingleFile(entryExecPath!, installDir, installedExecName);
 
             // Write install metadata for update tracking
             string metaDir = Path.Combine(installDir, $"_{commandName}");
@@ -297,7 +314,93 @@ static class Installer
         }
     }
 
-    record ToolSettings(string CommandName, string EntryPoint, string Runner, string ToolDirectory);
+    internal record ToolSettings(string CommandName, string EntryPoint, string Runner, string ToolDirectory);
+
+    /// <summary>
+    /// Resolves the tool's executable file inside <paramref name="toolDir"/> using the
+    /// EntryPoint declared in DotnetToolSettings.xml, falling back to the command name.
+    /// The command name (what the user types) can differ from the executable file name,
+    /// so resolving by command name alone would falsely reject otherwise-valid packages.
+    /// Returns the full path to the executable, or null if none is found.
+    ///
+    /// EntryPoint is package-controlled, so any candidate that is rooted or escapes
+    /// <paramref name="toolDir"/> (e.g. "../../etc/passwd") is rejected to prevent a
+    /// malicious package from copying an arbitrary host file into the install directory.
+    /// </summary>
+    internal static string? ResolveEntryExecutable(string toolDir, ToolSettings info)
+    {
+        var candidates = new List<string>();
+
+        if (!string.IsNullOrEmpty(info.EntryPoint))
+        {
+            candidates.Add(info.EntryPoint);
+            // Some packages omit the platform extension in EntryPoint.
+            if (OperatingSystem.IsWindows()
+                && !info.EntryPoint.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add($"{info.EntryPoint}.exe");
+            }
+        }
+
+        // Fall back to the command name.
+        if (!string.IsNullOrEmpty(info.CommandName))
+        {
+            candidates.Add(OperatingSystem.IsWindows() ? $"{info.CommandName}.exe" : info.CommandName);
+        }
+
+        string toolDirFull = Path.GetFullPath(toolDir);
+        foreach (string candidate in candidates)
+        {
+            // Reject rooted paths outright; they always escape toolDir.
+            if (Path.IsPathRooted(candidate))
+                continue;
+
+            string path = Path.GetFullPath(Path.Combine(toolDirFull, candidate));
+            if (!IsWithinDirectory(toolDirFull, path))
+                continue;
+
+            if (File.Exists(path))
+                return path;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="candidateFull"/> (an already fully-qualified path)
+    /// is the directory itself or lies beneath <paramref name="dirFull"/>.
+    /// </summary>
+    static bool IsWithinDirectory(string dirFull, string candidateFull)
+    {
+        if (string.Equals(candidateFull, dirFull, StringComparison.Ordinal))
+            return true;
+
+        string dirWithSep = dirFull.EndsWith(Path.DirectorySeparatorChar)
+            ? dirFull
+            : dirFull + Path.DirectorySeparatorChar;
+        return candidateFull.StartsWith(dirWithSep, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="name"/> is a plain file name safe to combine with an
+    /// install directory: non-empty, not "."/"..", not rooted, containing no directory
+    /// separators or invalid file-name characters. Guards against package-controlled names
+    /// escaping the install directory.
+    /// </summary>
+    internal static bool IsSafeFileName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+        if (name is "." or "..")
+            return false;
+        if (Path.IsPathRooted(name))
+            return false;
+        if (name.IndexOfAny(new[] { '/', '\\' }) >= 0)
+            return false;
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            return false;
+        return true;
+    }
 
     /// <summary>
     /// Resolves the RID-specific package ID from a pointer package's DotnetToolSettings.xml.
