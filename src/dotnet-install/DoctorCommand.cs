@@ -23,31 +23,9 @@ static class DoctorCommand
         issues += CheckShellPath(installDir, fix);
 
         if (pathOnly)
-        {
-            if (IsBootstrapInstall())
-            {
-                Console.WriteLine();
-                Console.WriteLine("Run the following to complete installation:");
-                Console.WriteLine();
-                Console.WriteLine("dotnet-install doctor --fix");
-            }
             return 0;
-        }
 
-        bool isBootstrap = IsBootstrapInstall();
-
-        if (fix && isBootstrap)
-        {
-            Console.WriteLine("Setting up dotnet-install (one-time)...");
-        }
-
-        // Step 2: Ensure dotnet-install binary is in the install directory
-        issues += await CheckBinaryAsync(installDir, fix, isBootstrap);
-
-        // Step 3: Shed bootstrap scaffolding (dotnet tool) if present
-        issues += ShedBootstrapTool(installDir, fix);
-
-        // Step 4: Drain global tools if configured
+        // Step 2: Drain global tools if configured
         var config = UserConfig.Read(installDir);
         if (config.ManageGlobalTools)
         {
@@ -61,43 +39,6 @@ static class DoctorCommand
         }
 
         return 0;
-    }
-
-    /// <summary>
-    /// Check if dotnet-install was bootstrapped via `dotnet tool install -g`.
-    /// </summary>
-    static bool IsBootstrapInstall()
-    {
-        var tools = ListDotnetGlobalTools();
-        return tools?.Any(t =>
-            t.PackageId.Equals("dotnet-install", StringComparison.OrdinalIgnoreCase)) == true;
-    }
-
-    /// <summary>
-    /// Check that dotnet-install binary exists in the install directory.
-    /// Uses tool list discovery instead of raw File.Exists.
-    /// </summary>
-    static async Task<int> CheckBinaryAsync(string installDir, bool fix, bool isBootstrap)
-    {
-        if (IsToolInstalled(installDir, "dotnet-install"))
-        {
-            if (!isBootstrap)
-                Console.WriteLine($"{Ok} dotnet-install is in {DisplayPath(installDir)}");
-            return 0;
-        }
-
-        if (!fix)
-        {
-            Console.WriteLine($"{Warn} dotnet-install is not in {DisplayPath(installDir)}");
-            return 1;
-        }
-
-        int result = await Installer.InstallPackageAsync("dotnet-install", installDir, quiet: true);
-        if (result == 0)
-            Console.WriteLine($"{Ok} Installed to {DisplayPath(installDir)}");
-        else
-            Console.WriteLine($"{Warn} Failed to install dotnet-install");
-        return result == 0 ? 0 : 1;
     }
 
     /// <summary>
@@ -261,57 +202,6 @@ static class DoctorCommand
     }
 
     /// <summary>
-    /// If dotnet-install was bootstrapped via `dotnet tool install -g`, remove the dotnet tool version.
-    /// </summary>
-    static int ShedBootstrapTool(string installDir, bool fix)
-    {
-        var tools = ListDotnetGlobalTools();
-        if (tools is null) return 0;
-
-        var selfTool = tools.FirstOrDefault(t =>
-            t.PackageId.Equals("dotnet-install", StringComparison.OrdinalIgnoreCase));
-
-        if (selfTool is null) return 0;
-
-        if (!IsToolInstalled(installDir, "dotnet-install")) return 0;
-
-        if (!fix)
-            return 1;
-
-        // On Windows, the bootstrap .cmd shim is still being executed by the
-        // calling shell. Uninstalling it mid-execution deletes the shim and
-        // produces "The batch file cannot be found." Defer to the next run,
-        // which will be invoked from ~/.dotnet/bin instead.
-        if (OperatingSystem.IsWindows() && IsRunningFromDotnetTools())
-            return 0;
-
-        var psi = new ProcessStartInfo("dotnet", ["tool", "uninstall", "-g", "dotnet-install"])
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        using var process = Process.Start(psi);
-        if (process is null) return 1;
-        process.WaitForExit();
-
-        // The exit code may be unreliable (e.g. on Windows the store cleanup
-        // can fail even though the tool was removed). Verify with tool list.
-        var remaining = ListDotnetGlobalTools();
-        bool removed = remaining?.Any(t =>
-            t.PackageId.Equals("dotnet-install", StringComparison.OrdinalIgnoreCase)) != true;
-
-        if (removed)
-        {
-            Console.WriteLine($"{Ok} Removed from ~/.dotnet/tools");
-            return 0;
-        }
-
-        Console.WriteLine($"{Warn} Failed to remove from ~/.dotnet/tools");
-        return 1;
-    }
-
-    /// <summary>
     /// Drain dotnet global tools: reinstall each via dotnet-install, then remove the dotnet tool.
     /// Only removes a dotnet tool after dotnet-install successfully installs it.
     /// </summary>
@@ -438,75 +328,6 @@ static class DoctorCommand
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return path.Replace(home, "~");
-    }
-
-    /// <summary>
-    /// Check if a tool is installed in the install directory using the same
-    /// discovery logic as `dotnet-install ls`.
-    /// </summary>
-    static bool IsToolInstalled(string installDir, string toolName)
-    {
-        if (!Directory.Exists(installDir)) return false;
-
-        return Directory.GetFileSystemEntries(installDir)
-            .Select(p => new FileInfo(p))
-            .Any(f => Path.GetFileNameWithoutExtension(f.Name)
-                .Equals(toolName, StringComparison.OrdinalIgnoreCase)
-                && IsExecutable(f));
-    }
-
-    /// <summary>
-    /// Check if the current process is running from the dotnet global tools directory.
-    /// </summary>
-    static bool IsRunningFromDotnetTools()
-    {
-        string? exePath = Environment.ProcessPath;
-        if (exePath is null) return false;
-
-        string toolsDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dotnet", "tools");
-
-        return exePath.StartsWith(toolsDir, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Check if a command is available on PATH (like `which` / `where`).
-    /// </summary>
-    static string? Which(string command)
-    {
-        var psi = new ProcessStartInfo(
-            OperatingSystem.IsWindows() ? "where" : "which",
-            [command])
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        try
-        {
-            using var process = Process.Start(psi);
-            if (process is null) return null;
-            string output = process.StandardOutput.ReadLine() ?? "";
-            process.WaitForExit();
-            return process.ExitCode == 0 && output.Length > 0 ? output : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    static bool IsExecutable(FileInfo f)
-    {
-        if (f.Name.StartsWith('_')) return false;
-        if (f.LinkTarget is not null) return true;
-
-        if (!OperatingSystem.IsWindows())
-            return (f.UnixFileMode & UnixFileMode.UserExecute) != 0;
-
-        return f.Extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
-            || f.Extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase);
     }
 }
 

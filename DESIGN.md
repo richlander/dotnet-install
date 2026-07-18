@@ -84,11 +84,10 @@ For GitHub repos with multiple projects, resolution order:
 If multiple candidates remain (≤12), an interactive
 arrow-key selector is presented.
 
-## Bootstrap graduation
+## Bootstrap
 
-Users can bootstrap `dotnet-install` itself via
-`dotnet tool install -g dotnet-install`. After that,
-`dotnet-install setup` self-installs from NuGet into
-`~/.dotnet/bin/` and sheds the dotnet tool scaffolding —
-a one-time graduation from the `.store/` model to the
-flat layout.
+Install `dotnet-install` itself with the SDK via
+`dotnet tool install -g dotnet-install`. It stays a
+managed .NET tool; run `dotnet-install doctor --fix`
+to add `~/.dotnet/bin/` to PATH. The single-file tools
+it installs land there.

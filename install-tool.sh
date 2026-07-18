@@ -3,8 +3,8 @@
 # Usage: ./install-tool.sh
 #
 # Installs dotnet-install as a .NET global tool and configures
-# your shell PATH. Run `dotnet-install doctor --fix` later to
-# graduate to a standalone binary in ~/.dotnet/bin/.
+# your shell PATH. dotnet-install stays a managed .NET tool and
+# installs single-file tools into ~/.dotnet/bin/.
 #
 # Requires the .NET SDK.
 #
@@ -16,12 +16,11 @@ set -eu
 main() {
     need_cmd dotnet
 
-    # Install as dotnet global tool (bootstrap)
+    # Install as dotnet global tool
     say "installing dotnet-install via dotnet tool..."
     dotnet tool install -g dotnet-install
 
-    # Configure shell PATH only — graduation to standalone binary
-    # happens later via `dotnet-install doctor --fix`
+    # Configure shell PATH
     say "configuring PATH..."
     dotnet-install doctor --fix --path
 }
