@@ -400,24 +400,66 @@ static class UpdateCommand
     internal enum ReleasePayloadStatus { Ok, NotSingleFile, BinaryNotFound }
 
     /// <summary>
-    /// Extracts a downloaded release archive into <paramref name="extractDir"/> using
-    /// managed APIs (ZipFile / TarFile) that reject entries escaping the destination
-    /// directory (zip-slip / tar-slip), unlike shelling out to <c>tar</c>. Returns false
-    /// and writes a message to stderr on failure.
+    /// Extracts a downloaded release archive into <paramref name="extractDir"/>.
+    /// The Unix tar path is walked entry by entry so we can (a) reject link entries
+    /// outright — a single-file tool payload never needs them, and symlink/hardlink
+    /// entries are the vector for extraction-time escape — and (b) contain every
+    /// entry's resolved path within <paramref name="extractDir"/> ourselves, rather
+    /// than trusting <c>TarFile.ExtractToDirectory</c>, whose physical symlink
+    /// containment check is not present in all supported runtimes. This replaces
+    /// shelling out to <c>tar -xzf</c>, which honors <c>../</c> entries (tar-slip).
+    /// Returns false and writes a message to stderr on failure.
     /// </summary>
     internal static bool TryExtractReleaseArchive(string archivePath, string extractDir, bool isWindows)
     {
+        string destRoot = Path.GetFullPath(extractDir);
         try
         {
             if (isWindows)
             {
-                ZipFile.ExtractToDirectory(archivePath, extractDir);
+                // ZipFile rejects entries that resolve outside the destination.
+                ZipFile.ExtractToDirectory(archivePath, destRoot);
+                return true;
             }
-            else
+
+            using var archiveFile = File.OpenRead(archivePath);
+            using var gzip = new GZipStream(archiveFile, CompressionMode.Decompress);
+            using var reader = new TarReader(gzip);
+            for (TarEntry? entry = reader.GetNextEntry(); entry is not null; entry = reader.GetNextEntry())
             {
-                using var archiveFile = File.OpenRead(archivePath);
-                using var gzip = new GZipStream(archiveFile, CompressionMode.Decompress);
-                TarFile.ExtractToDirectory(gzip, extractDir, overwriteFiles: true);
+                switch (entry.EntryType)
+                {
+                    case TarEntryType.Directory:
+                    case TarEntryType.RegularFile:
+                    case TarEntryType.V7RegularFile:
+                        break;
+                    case TarEntryType.GlobalExtendedAttributes:
+                    case TarEntryType.ExtendedAttributes:
+                        // Metadata pseudo-entries; no filesystem object to create.
+                        continue;
+                    default:
+                        // Symbolic/hard links, devices, fifos: never part of a valid
+                        // single-file payload, and the escape vector we must refuse.
+                        Console.Error.WriteLine($"  extract failed: unsupported archive entry '{entry.Name}' ({entry.EntryType})");
+                        return false;
+                }
+
+                string fullTarget = Path.GetFullPath(Path.Combine(destRoot, entry.Name));
+                if (!IsWithinDirectory(destRoot, fullTarget))
+                {
+                    Console.Error.WriteLine($"  extract failed: entry '{entry.Name}' escapes extraction directory");
+                    return false;
+                }
+
+                if (entry.EntryType == TarEntryType.Directory)
+                {
+                    Directory.CreateDirectory(fullTarget);
+                }
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(fullTarget)!);
+                    entry.ExtractToFile(fullTarget, overwrite: true);
+                }
             }
             return true;
         }
@@ -426,6 +468,19 @@ static class UpdateCommand
             Console.Error.WriteLine($"  extract failed: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>Returns true when <paramref name="candidateFull"/> is <paramref name="dirFull"/>
+    /// itself or a path nested beneath it. Both arguments must be normalized full paths.</summary>
+    static bool IsWithinDirectory(string dirFull, string candidateFull)
+    {
+        if (string.Equals(candidateFull, dirFull, StringComparison.Ordinal))
+            return true;
+
+        string dirWithSep = dirFull.EndsWith(Path.DirectorySeparatorChar)
+            ? dirFull
+            : dirFull + Path.DirectorySeparatorChar;
+        return candidateFull.StartsWith(dirWithSep, StringComparison.Ordinal);
     }
 
     /// <summary>

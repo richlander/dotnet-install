@@ -153,4 +153,62 @@ public class ReleasePayloadValidationTests : IDisposable
         Assert.True(ok);
         Assert.True(File.Exists(Path.Combine(_extractDir, binaryName)));
     }
+
+    [Fact]
+    public void Extraction_RejectsSymlinkEntry()
+    {
+        // A single-file tool payload never contains links; a symlink entry is the
+        // vector for chained-symlink escape, so extraction must refuse it outright.
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string archivePath = Path.Combine(_workDir, "symlink.tar.gz");
+
+        using (var fs = File.Create(archivePath))
+        using (var gz = new GZipStream(fs, CompressionMode.Compress))
+        using (var tar = new TarWriter(gz))
+        {
+            tar.WriteEntry(new PaxTarEntry(TarEntryType.SymbolicLink, "link")
+            {
+                LinkName = "/tmp",
+            });
+        }
+
+        bool ok = UpdateCommand.TryExtractReleaseArchive(archivePath, _extractDir, isWindows: false);
+
+        Assert.False(ok);
+        Assert.False(File.Exists(Path.Combine(_extractDir, "link")));
+    }
+
+    [Fact]
+    public void Extraction_RejectsChainedSymlinkEscape()
+    {
+        // Classic tar escape: a symlink to an outside directory followed by a file
+        // entry that writes *through* it. Extraction must refuse the link before any
+        // write can land outside extractDir.
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string archivePath = Path.Combine(_workDir, "chained.tar.gz");
+        string escapeMarker = Path.Combine(_workDir, "escaped.txt");
+
+        using (var fs = File.Create(archivePath))
+        using (var gz = new GZipStream(fs, CompressionMode.Compress))
+        using (var tar = new TarWriter(gz))
+        {
+            tar.WriteEntry(new PaxTarEntry(TarEntryType.SymbolicLink, "sneaky")
+            {
+                LinkName = _workDir,
+            });
+            tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "sneaky/escaped.txt")
+            {
+                DataStream = new MemoryStream(ElfHeader),
+            });
+        }
+
+        bool ok = UpdateCommand.TryExtractReleaseArchive(archivePath, _extractDir, isWindows: false);
+
+        Assert.False(ok);
+        Assert.False(File.Exists(escapeMarker));
+    }
 }
