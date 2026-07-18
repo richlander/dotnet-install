@@ -66,7 +66,7 @@ static class Installer
 
         try
         {
-            if (!Publish(projectFile, tempDir, info.IsSelfContained))
+            if (!Publish(projectFile, tempDir))
             {
                 Console.Error.WriteLine("error: publish failed");
                 return 1;
@@ -682,7 +682,7 @@ static class Installer
 
     // ---- Publish (out-of-process) ----
 
-    static bool Publish(string projectFile, string outputDir, bool selfContained = true)
+    static bool Publish(string projectFile, string outputDir)
     {
         // Preflight: check that the .NET SDK is available
         try
@@ -726,14 +726,16 @@ static class Installer
             UseShellExecute = false,
         };
 
+        // Publish with the project's own configuration. The candidate check
+        // already verified (via property evaluation) that the project opts into
+        // Native AOT or self-contained single-file, so nothing is injected here
+        // to coerce single-file/self-contained publishing — the project decides.
         psi.ArgumentList.Add("publish");
         psi.ArgumentList.Add(fullProjectPath);
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add("Release");
         psi.ArgumentList.Add("-r");
         psi.ArgumentList.Add(rid);
-        if (selfContained)
-            psi.ArgumentList.Add("--self-contained");
         psi.ArgumentList.Add("-o");
         psi.ArgumentList.Add(outputDir);
 
