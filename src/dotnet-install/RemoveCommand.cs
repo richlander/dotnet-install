@@ -27,6 +27,19 @@ static class RemoveCommand
             // name used for both the launcher variants and the _<name>/ payload dir.
             string logicalName = LogicalName(name);
 
+            // Guard the pathological case of a command name literally ending in
+            // .exe/.cmd: if the user typed a suffixed name that ALSO matches a distinct
+            // literally-suffixed install, the request is ambiguous — refuse rather than
+            // delete the wrong tool.
+            if (!name.Equals(logicalName, StringComparison.Ordinal) &&
+                FindEntries(installDir, name).Length > 0)
+            {
+                Console.Error.WriteLine(
+                    $"Ambiguous: '{name}' could mean tool '{logicalName}' or '{name}'. Remove one at a time using its exact installed name.");
+                exitCode = 1;
+                continue;
+            }
+
             // Find all launcher variants for the tool (a legacy install may leave a
             // <name>.cmd shim next to a newer <name>.exe; clean up both).
             string[] entryPaths = FindEntries(installDir, logicalName);
