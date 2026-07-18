@@ -244,6 +244,15 @@ static class Installer
             string commandName = toolInfo.CommandName;
             string toolDir = toolInfo.ToolDirectory;
 
+            // CommandName is package-controlled and is used to name the installed binary
+            // and its metadata directory. Reject anything that isn't a plain file name so
+            // a package cannot escape installDir (e.g. Name="../../victim").
+            if (!IsSafeFileName(commandName))
+            {
+                Console.Error.WriteLine($"error: package declares an invalid command name '{commandName}'.");
+                return 1;
+            }
+
             // SourceLink verification (before placement)
             if (requireSourceLink && !SourceLinkCheck.Verify(toolDir))
             {
@@ -370,6 +379,27 @@ static class Installer
             ? dirFull
             : dirFull + Path.DirectorySeparatorChar;
         return candidateFull.StartsWith(dirWithSep, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="name"/> is a plain file name safe to combine with an
+    /// install directory: non-empty, not "."/"..", not rooted, containing no directory
+    /// separators or invalid file-name characters. Guards against package-controlled names
+    /// escaping the install directory.
+    /// </summary>
+    internal static bool IsSafeFileName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+        if (name is "." or "..")
+            return false;
+        if (Path.IsPathRooted(name))
+            return false;
+        if (name.IndexOfAny(new[] { '/', '\\' }) >= 0)
+            return false;
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            return false;
+        return true;
     }
 
     /// <summary>

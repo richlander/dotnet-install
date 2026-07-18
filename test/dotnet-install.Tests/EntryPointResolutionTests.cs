@@ -128,4 +128,32 @@ public class EntryPointResolutionTests : IDisposable
             try { File.Delete(sibling); } catch { }
         }
     }
+
+    [Theory]
+    [InlineData("mytool")]
+    [InlineData("dotnet-foo")]
+    public void AcceptsPlainCommandNames(string name)
+    {
+        Assert.True(Installer.IsSafeFileName(name));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("../victim")]
+    [InlineData("../../victim")]
+    [InlineData("sub/tool")]
+    [InlineData("sub\\tool")]
+    public void RejectsUnsafeCommandNames(string name)
+    {
+        Assert.False(Installer.IsSafeFileName(name));
+    }
+
+    [Fact]
+    public void RejectsRootedCommandName()
+    {
+        string rooted = OperatingSystem.IsWindows() ? "C:\\Windows\\victim" : "/etc/victim";
+        Assert.False(Installer.IsSafeFileName(rooted));
+    }
 }
