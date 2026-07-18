@@ -255,10 +255,16 @@ static class Installer
 
             // Only single-file native executables are supported (CLI tools v2).
             // Managed (.dll) tools and multi-file layouts belong to `dotnet tool install`.
-            string nativeExecName = OperatingSystem.IsWindows() ? $"{commandName}.exe" : commandName;
-            string nativeExecPath = Path.Combine(toolDir, nativeExecName);
-            bool isNativeSingleFile = File.Exists(nativeExecPath)
-                && !File.Exists(Path.Combine(toolDir, $"{commandName}.dll"))
+            //
+            // Locate the payload via the EntryPoint declared in DotnetToolSettings.xml.
+            // EntryPoint names the actual file to run, which can differ from the command
+            // name the user types; resolving by command name alone falsely rejects such
+            // packages.
+            string? entryExecPath = ResolveEntryExecutable(toolDir, toolInfo);
+            bool isManaged = string.Equals(toolInfo.Runner, "dotnet", StringComparison.OrdinalIgnoreCase)
+                || (entryExecPath is not null && entryExecPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+            bool isNativeSingleFile = entryExecPath is not null
+                && !isManaged
                 && IsSingleFile(toolDir);
 
             if (!isNativeSingleFile)
@@ -271,8 +277,10 @@ static class Installer
                 return 1;
             }
 
-            // Native single-file: place directly
-            PlaceSingleFile(nativeExecPath, installDir, nativeExecName);
+            // Place under the command name so the tool resolves on PATH as the user
+            // expects, even when the packaged executable file name differs.
+            string installedExecName = OperatingSystem.IsWindows() ? $"{commandName}.exe" : commandName;
+            PlaceSingleFile(entryExecPath!, installDir, installedExecName);
 
             // Write install metadata for update tracking
             string metaDir = Path.Combine(installDir, $"_{commandName}");
@@ -297,7 +305,45 @@ static class Installer
         }
     }
 
-    record ToolSettings(string CommandName, string EntryPoint, string Runner, string ToolDirectory);
+    internal record ToolSettings(string CommandName, string EntryPoint, string Runner, string ToolDirectory);
+
+    /// <summary>
+    /// Resolves the tool's executable file inside <paramref name="toolDir"/> using the
+    /// EntryPoint declared in DotnetToolSettings.xml, falling back to the command name.
+    /// The command name (what the user types) can differ from the executable file name,
+    /// so resolving by command name alone would falsely reject otherwise-valid packages.
+    /// Returns the full path to the executable, or null if none is found.
+    /// </summary>
+    internal static string? ResolveEntryExecutable(string toolDir, ToolSettings info)
+    {
+        var candidates = new List<string>();
+
+        if (!string.IsNullOrEmpty(info.EntryPoint))
+        {
+            candidates.Add(info.EntryPoint);
+            // Some packages omit the platform extension in EntryPoint.
+            if (OperatingSystem.IsWindows()
+                && !info.EntryPoint.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add($"{info.EntryPoint}.exe");
+            }
+        }
+
+        // Fall back to the command name.
+        if (!string.IsNullOrEmpty(info.CommandName))
+        {
+            candidates.Add(OperatingSystem.IsWindows() ? $"{info.CommandName}.exe" : info.CommandName);
+        }
+
+        foreach (string candidate in candidates)
+        {
+            string path = Path.Combine(toolDir, candidate);
+            if (File.Exists(path))
+                return path;
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Resolves the RID-specific package ID from a pointer package's DotnetToolSettings.xml.
