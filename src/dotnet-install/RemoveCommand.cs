@@ -22,9 +22,14 @@ static class RemoveCommand
                 continue;
             }
 
+            // On Windows `ls` shows the physical launcher name (e.g. foo.exe); accept
+            // that form as well as the bare command name by normalizing to a logical
+            // name used for both the launcher variants and the _<name>/ payload dir.
+            string logicalName = LogicalName(name);
+
             // Find all launcher variants for the tool (a legacy install may leave a
             // <name>.cmd shim next to a newer <name>.exe; clean up both).
-            string[] entryPaths = FindEntries(installDir, name);
+            string[] entryPaths = FindEntries(installDir, logicalName);
 
             if (entryPaths.Length == 0)
             {
@@ -36,7 +41,7 @@ static class RemoveCommand
             string? target = null;
 
             // Also remove the _appname directory if it exists (legacy payload)
-            string appDir = Path.Combine(installDir, $"_{name}");
+            string appDir = Path.Combine(installDir, $"_{logicalName}");
             if (Directory.Exists(appDir))
                 Directory.Delete(appDir, true);
 
@@ -53,6 +58,22 @@ static class RemoveCommand
         }
 
         return exitCode;
+    }
+
+    static string LogicalName(string name)
+    {
+        // On Windows the launcher carries a .exe (current) or legacy .cmd extension,
+        // and `ls` prints that physical name; strip it to the logical command name so
+        // `remove foo` and `remove foo.exe` behave the same. On Unix the command name
+        // is used verbatim (dots are meaningful), so never strip.
+        if (OperatingSystem.IsWindows() &&
+            (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+             name.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)))
+        {
+            return name[..^4];
+        }
+
+        return name;
     }
 
     static string[] FindEntries(string installDir, string name)
