@@ -38,14 +38,6 @@ static class ToolMetadata
 
 class ToolManifest
 {
-    [JsonPropertyName("entryPoint")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? EntryPoint { get; set; }
-
-    [JsonPropertyName("rollForward")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public bool RollForward { get; set; }
-
     [JsonPropertyName("source")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public InstallSource? Source { get; set; }

@@ -27,10 +27,6 @@ static class CommandLineBuilder
         {
             Description = "Clone using SSH instead of HTTPS"
         };
-        var rollForwardOption = new Option<bool>("--allow-roll-forward")
-        {
-            Description = "Allow tool to run on a newer .NET runtime version"
-        };
         var sourceLinkOption = new Option<bool>("--require-sourcelink")
         {
             Description = "Require SourceLink metadata in installed assemblies"
@@ -91,7 +87,6 @@ static class CommandLineBuilder
         rootCommand.Options.Add(outputOption);
         rootCommand.Options.Add(localBinOption);
         rootCommand.Options.Add(sshOption);
-        rootCommand.Options.Add(rollForwardOption);
         rootCommand.Options.Add(sourceLinkOption);
 
         // --- Subcommands ---
@@ -196,7 +191,6 @@ static class CommandLineBuilder
         installCommand.Options.Add(outputOption);
         installCommand.Options.Add(localBinOption);
         installCommand.Options.Add(sshOption);
-        installCommand.Options.Add(rollForwardOption);
         installCommand.Options.Add(sourceLinkOption);
         installCommand.SetAction(async (parseResult, ct) =>
         {
@@ -213,7 +207,6 @@ static class CommandLineBuilder
                 parseResult.GetValue(outputOption),
                 parseResult.GetValue(localBinOption),
                 parseResult.GetValue(sshOption),
-                parseResult.GetValue(rollForwardOption),
                 parseResult.GetValue(sourceLinkOption));
         });
 
@@ -274,29 +267,6 @@ static class CommandLineBuilder
                 parseResult.GetValue(outdatedJsonOption));
         });
 
-        // --- run command ---
-        var runPackageArg = new Argument<string>("package") { Description = "NuGet package name[@version]" };
-        var runToolArgsArg = new Argument<string[]>("args")
-        {
-            Description = "Arguments to pass to the tool",
-            Arity = ArgumentArity.ZeroOrMore
-        };
-        var runRollForwardOption = new Option<bool>("--allow-roll-forward")
-        {
-            Description = "Allow tool to run on a newer .NET runtime version"
-        };
-        var runCommand = new Command("run", "Run a NuGet tool without installing it (like npx)");
-        runCommand.Arguments.Add(runPackageArg);
-        runCommand.Arguments.Add(runToolArgsArg);
-        runCommand.Options.Add(runRollForwardOption);
-        runCommand.SetAction(async (parseResult, ct) =>
-        {
-            return await RunCommand.RunAsync(
-                parseResult.GetValue(runPackageArg)!,
-                parseResult.GetValue(runToolArgsArg) ?? [],
-                parseResult.GetValue(runRollForwardOption));
-        });
-
         // --- completion command ---
         var completionShellArg = new Argument<string>("shell") { Description = "Shell type (bash, zsh, fish, powershell)" };
         var completionCommand = new Command("completion", "Generate shell completion script");
@@ -328,7 +298,6 @@ static class CommandLineBuilder
         rootCommand.Subcommands.Add(searchCommand);
         rootCommand.Subcommands.Add(infoCommand);
         rootCommand.Subcommands.Add(outdatedCommand);
-        rootCommand.Subcommands.Add(runCommand);
         rootCommand.Subcommands.Add(completionCommand);
         rootCommand.Subcommands.Add(envCommand);
         rootCommand.Subcommands.Add(skillCommand);
@@ -348,12 +317,11 @@ static class CommandLineBuilder
             string? outputDir = parseResult.GetValue(outputOption);
             bool useLocalBin = parseResult.GetValue(localBinOption);
             bool useSsh = parseResult.GetValue(sshOption);
-            bool allowRollForward = parseResult.GetValue(rollForwardOption);
             bool requireSourceLink = parseResult.GetValue(sourceLinkOption);
 
             return await InstallAction.RunAsync(
                 project, package, github, git, branch, tag, rev, projectPath,
-                outputDir, useLocalBin, useSsh, allowRollForward, requireSourceLink);
+                outputDir, useLocalBin, useSsh, requireSourceLink);
         });
 
         // --- Custom help ---

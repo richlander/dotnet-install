@@ -19,23 +19,8 @@ static class InfoCommand
         string appDir = Path.Combine(installDir, $"_{toolName}");
         var manifest = Directory.Exists(appDir) ? ToolMetadata.Read(appDir) : null;
 
-        // Determine type
-        string type;
-        if (info.LinkTarget is not null)
-        {
-            string target = Path.GetFileName(info.LinkTarget);
-            type = target.StartsWith("dotnet-install") ? "CoreCLR (managed)" : "CoreCLR (self-contained)";
-            if (Directory.Exists(appDir) && File.Exists(Path.Combine(appDir, $"{toolName}.dll")))
-                type = target.StartsWith("dotnet-install") ? "CoreCLR (managed)" : "CoreCLR (self-contained)";
-            else if (Directory.Exists(appDir))
-                type = "NAOT (multi-file)";
-        }
-        else
-        {
-            type = Directory.Exists(appDir) ? "NAOT (multi-file)" : "NAOT (single-file)";
-            if (Directory.Exists(appDir) && File.Exists(Path.Combine(appDir, $"{toolName}.dll")))
-                type = "CoreCLR (self-contained)";
-        }
+        // All installed tools are single-file native executables.
+        string type = "single-file";
 
         // Calculate size
         long totalSize = info.Length;
@@ -95,14 +80,6 @@ static class InfoCommand
                 Console.WriteLine($"Commit:    {src.Commit[..Math.Min(7, src.Commit.Length)]}");
             if (src.Project is not null)
                 Console.WriteLine($"Project:   {src.Project}");
-        }
-
-        if (manifest is not null)
-        {
-            if (manifest.RollForward)
-                Console.WriteLine($"Roll-fwd:  enabled");
-            if (manifest.EntryPoint is not null)
-                Console.WriteLine($"Entry:     {manifest.EntryPoint}");
         }
 
         return 0;
