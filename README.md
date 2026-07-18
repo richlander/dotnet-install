@@ -55,7 +55,7 @@ irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1
 
 ```bash
 dotnet tool install -g dotnet-install
-dotnet-install setup
+dotnet-install doctor --fix
 ```
 
 ### From source
@@ -170,7 +170,7 @@ Managed or multi-file tools aren't supported here — install those with
 dotnet-install [<project-path>] [command] [options]
 
 Commands:
-  setup          Configure shell PATH and create self-link
+  doctor         Configure shell PATH and check setup
   ls (list)      List installed tools
   update <tool>  Check for updates and reinstall
   rm (remove)    Remove installed tools

@@ -24,9 +24,9 @@ binaries in `.store/`, `dotnet-install` places real
 binaries directly in `~/.dotnet/bin/` — a flat,
 transparent layout like Go's `~/go/bin/` or Cargo's
 `~/.cargo/bin/`. Users can acquire dotnet-install
-itself via `dotnet tool install -g` as a bootstrap,
-after which `dotnet-install setup` graduates the tool
-to `~/.dotnet/bin/` and sheds the dotnet tool scaffolding.
+itself via `dotnet tool install -g`; it stays a managed
+.NET tool and runs `dotnet-install doctor --fix` to add
+`~/.dotnet/bin/` to PATH.
 
 ## Two directories — don't confuse them
 
@@ -67,8 +67,8 @@ The tool lives at `src/dotnet-install/` in this repo:
   project discovery, `.dotnet-install.json` manifest
 - `ShellHint.cs` — PATH detection, shell-specific
   setup instructions, `DOTNET_TOOL_BIN` env var
-- `SetupCommand.cs` — Shell PATH config, self-install
-  from NuGet (bootstrap graduation), shed dotnet tool
+- `DoctorCommand.cs` — Shell PATH config and
+  environment checks (`doctor`)
 - `EnvCommand.cs` — Print environment info (`cargo env` style)
 - `ProjectSelector.cs` — Interactive arrow-key selector
   for repos with multiple executable projects

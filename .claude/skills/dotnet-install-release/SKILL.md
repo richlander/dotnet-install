@@ -109,8 +109,8 @@ It does NOT need updating on each release.
 `install-source.sh` builds from the local source
 checkout — for development use only.
 
-`install-tool.sh` bootstraps via `dotnet tool install -g`
-then graduates with `setup`.
+`install-tool.sh` installs via `dotnet tool install -g`
+then configures PATH with `doctor --fix --path`.
 
 ## Versioning convention
 
