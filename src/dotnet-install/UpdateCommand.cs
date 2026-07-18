@@ -316,14 +316,18 @@ static class UpdateCommand
                 await archiveStream.CopyToAsync(fileStream);
             }
 
-            // Extract
+            // Extract into a dedicated subdirectory so the archive itself isn't
+            // counted when validating the payload is a single file.
+            string extractDir = Path.Combine(tempDir, "extract");
+            Directory.CreateDirectory(extractDir);
+
             if (isWindows)
             {
-                System.IO.Compression.ZipFile.ExtractToDirectory(archivePath, tempDir);
+                System.IO.Compression.ZipFile.ExtractToDirectory(archivePath, extractDir);
             }
             else
             {
-                var psi = new ProcessStartInfo("tar", ["-xzf", archivePath, "-C", tempDir])
+                var psi = new ProcessStartInfo("tar", ["-xzf", archivePath, "-C", extractDir])
                 {
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -337,13 +341,18 @@ static class UpdateCommand
                 }
             }
 
-            // Find the binary
+            // Enforce the single-file contract, matching the install path: the
+            // release asset must contain exactly one self-contained executable.
+            // Reject multi-file or framework-dependent payloads.
             string binaryName = isWindows ? $"{tool.Name}.exe" : tool.Name;
-            string extractedBinary = Path.Combine(tempDir, binaryName);
-            if (!File.Exists(extractedBinary))
+            switch (ValidateReleasePayload(extractDir, binaryName, out string? extractedBinary))
             {
-                Console.Error.WriteLine($"  binary not found in archive");
-                return 1;
+                case ReleasePayloadStatus.NotSingleFile:
+                    Console.Error.WriteLine("  release asset is not a single-file executable; refusing to update");
+                    return 1;
+                case ReleasePayloadStatus.BinaryNotFound:
+                    Console.Error.WriteLine("  binary not found in archive");
+                    return 1;
             }
 
             // Replace the binary (rename-then-copy to handle self-update "text file busy")
@@ -364,7 +373,7 @@ static class UpdateCommand
                 }
             }
 
-            File.Copy(extractedBinary, targetBinary, overwrite: true);
+            File.Copy(extractedBinary!, targetBinary, overwrite: true);
 
             if (!isWindows)
             {
@@ -399,6 +408,30 @@ static class UpdateCommand
         {
             try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
+    }
+
+    // ---- Release payload validation ----
+
+    internal enum ReleasePayloadStatus { Ok, NotSingleFile, BinaryNotFound }
+
+    /// <summary>
+    /// Validates that an extracted github-release asset satisfies the single-file
+    /// contract (exactly one self-contained executable, matching the install path)
+    /// and locates the expected binary. <paramref name="extractDir"/> must contain
+    /// only the extracted payload, not the downloaded archive.
+    /// </summary>
+    internal static ReleasePayloadStatus ValidateReleasePayload(string extractDir, string binaryName, out string? binaryPath)
+    {
+        binaryPath = null;
+        if (!Installer.IsSingleFile(extractDir))
+            return ReleasePayloadStatus.NotSingleFile;
+
+        string candidate = Path.Combine(extractDir, binaryName);
+        if (!File.Exists(candidate))
+            return ReleasePayloadStatus.BinaryNotFound;
+
+        binaryPath = candidate;
+        return ReleasePayloadStatus.Ok;
     }
 
     // ---- Version helpers ----
