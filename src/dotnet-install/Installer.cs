@@ -446,6 +446,7 @@ static class Installer
                     "-getProperty:PublishAot",
                     "-getProperty:PublishSingleFile",
                     "-getProperty:SelfContained",
+                    "-getProperty:PublishSelfContained",
                     "-getProperty:TargetFramework",
                     "-p:Configuration=Release",
                     $"-p:RuntimeIdentifier={rid}",
@@ -484,7 +485,10 @@ static class Installer
                 OutputType: outputType,
                 IsNativeAot: IsTrue(props, "PublishAot"),
                 IsSingleFile: IsTrue(props, "PublishSingleFile"),
-                IsSelfContained: IsTrue(props, "SelfContained"),
+                // `SelfContained` is only populated during the Publish target; a
+                // project that opts in via `PublishSelfContained` reads false at
+                // evaluation time, so honor both.
+                IsSelfContained: IsTrue(props, "SelfContained") || IsTrue(props, "PublishSelfContained"),
                 TargetFramework: string.IsNullOrEmpty(tfm) ? null : tfm
             );
         }
@@ -514,7 +518,7 @@ static class Installer
             OutputType: GetProperty(props, "OutputType") ?? defaultOutputType,
             IsNativeAot: isNativeAot,
             IsSingleFile: IsPropertyTrue(props, "PublishSingleFile"),
-            IsSelfContained: IsPropertyTrue(props, "SelfContained"),
+            IsSelfContained: IsPropertyTrue(props, "SelfContained") || IsPropertyTrue(props, "PublishSelfContained"),
             TargetFramework: GetProperty(props, "TargetFramework")
         );
     }
@@ -536,7 +540,8 @@ static class Installer
             OutputType: "Exe",
             IsNativeAot: string.Equals(properties.GetValueOrDefault("PublishAot"), "true", StringComparison.OrdinalIgnoreCase),
             IsSingleFile: string.Equals(properties.GetValueOrDefault("PublishSingleFile"), "true", StringComparison.OrdinalIgnoreCase),
-            IsSelfContained: string.Equals(properties.GetValueOrDefault("SelfContained"), "true", StringComparison.OrdinalIgnoreCase),
+            IsSelfContained: string.Equals(properties.GetValueOrDefault("SelfContained"), "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(properties.GetValueOrDefault("PublishSelfContained"), "true", StringComparison.OrdinalIgnoreCase),
             TargetFramework: properties.GetValueOrDefault("TargetFramework")
         );
     }
@@ -771,6 +776,7 @@ static class Installer
         string name = Path.GetFileName(file);
         if (name.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
             || name.EndsWith(".dbg", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".r2rmap", StringComparison.OrdinalIgnoreCase)
             || name.Equals("DotnetToolSettings.xml", StringComparison.OrdinalIgnoreCase))
             return true;
 

@@ -64,6 +64,15 @@ public class SingleFileDetectionTests : IDisposable
     }
 
     [Fact]
+    public void ExecutableWithReadyToRunSymbols_IsSingleFile()
+    {
+        // PublishReadyToRunEmitSymbols emits .r2rmap files beside the binary.
+        Touch("app");
+        Touch("app.r2rmap");
+        Assert.True(Installer.IsSingleFile(_dir));
+    }
+
+    [Fact]
     public void ExecutableWithNestedPayload_IsNotSingleFile()
     {
         Touch("app");
