@@ -22,25 +22,29 @@ static class RemoveCommand
                 continue;
             }
 
-            // Find the tool entry (symlink, binary, or .cmd shim)
-            string? entryPath = FindEntry(installDir, name);
+            // Find all launcher variants for the tool (a legacy install may leave a
+            // <name>.cmd shim next to a newer <name>.exe; clean up both).
+            string[] entryPaths = FindEntries(installDir, name);
 
-            if (entryPath is null)
+            if (entryPaths.Length == 0)
             {
                 Console.Error.WriteLine($"Not found: {name}");
                 exitCode = 1;
                 continue;
             }
 
-            var info = new FileInfo(entryPath);
-            string? target = info.LinkTarget;
+            string? target = null;
 
-            // Also remove the _appname directory if it exists (multi-file installs)
+            // Also remove the _appname directory if it exists (legacy payload)
             string appDir = Path.Combine(installDir, $"_{name}");
             if (Directory.Exists(appDir))
                 Directory.Delete(appDir, true);
 
-            File.Delete(entryPath);
+            foreach (string entryPath in entryPaths)
+            {
+                target ??= new FileInfo(entryPath).LinkTarget;
+                File.Delete(entryPath);
+            }
 
             if (target is not null)
                 Console.WriteLine($"Removed: {name} (was -> {target})");
@@ -51,8 +55,9 @@ static class RemoveCommand
         return exitCode;
     }
 
-    static string? FindEntry(string installDir, string name)
+    static string[] FindEntries(string installDir, string name)
     {
+        var found = new List<string>();
         foreach (string candidate in new[] { name, name + ".exe", name + ".cmd" })
         {
             string path = Path.Combine(installDir, candidate);
@@ -60,10 +65,10 @@ static class RemoveCommand
             // already gone would be missed; match it as a link entry directly so
             // its stale _<name>/ payload can still be cleaned up.
             if (File.Exists(path) || IsSymlink(path))
-                return path;
+                found.Add(path);
         }
 
-        return null;
+        return found.ToArray();
     }
 
     static bool IsSymlink(string path)

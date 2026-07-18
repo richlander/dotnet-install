@@ -46,4 +46,33 @@ static class InstallLayout
     /// <summary>Type label for <c>ls</c>/<c>info</c>.</summary>
     internal static string ClassifyType(string installDir, string toolName, FileInfo entry) =>
         IsLegacyManaged(installDir, toolName, entry) ? LegacyManagedType : SingleFileType;
+
+    /// <summary>
+    /// Reset a tool's metadata directory so a (re)install or update over a legacy
+    /// managed layout leaves only fresh single-file metadata with no stale payload.
+    /// Callers write the new <c>.tool.json</c> into it afterward.
+    /// </summary>
+    internal static void ResetMetadataDirectory(string installDir, string toolName)
+    {
+        string metaDir = MetadataDirectory(installDir, toolName);
+        if (Directory.Exists(metaDir))
+            Directory.Delete(metaDir, recursive: true);
+        Directory.CreateDirectory(metaDir);
+    }
+
+    /// <summary>
+    /// Remove a stale pre-redesign Windows <c>.cmd</c> launcher for a tool now being
+    /// installed/updated as a single-file binary. The launcher delegated to payload
+    /// in <c>_&lt;name&gt;/</c> that is being purged, so leaving it behind would strand
+    /// a broken command on PATH (and a duplicate entry in <c>ls</c>).
+    /// </summary>
+    internal static void RemoveLegacyLauncher(string installDir, string toolName)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        string cmdShim = Path.Combine(installDir, toolName + ".cmd");
+        if (File.Exists(cmdShim))
+            File.Delete(cmdShim);
+    }
 }

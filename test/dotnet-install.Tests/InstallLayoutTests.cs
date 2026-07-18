@@ -73,6 +73,39 @@ public class InstallLayoutTests : IDisposable
     }
 
     [Fact]
+    public void ResetMetadataDirectory_PurgesStalePayload()
+    {
+        string appDir = Path.Combine(_installDir, "_mytool");
+        Directory.CreateDirectory(appDir);
+        File.WriteAllBytes(Path.Combine(appDir, "mytool.dll"), [0x4D, 0x5A]);
+        File.WriteAllText(Path.Combine(appDir, "mytool.runtimeconfig.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(appDir, "sub"));
+
+        InstallLayout.ResetMetadataDirectory(_installDir, "mytool");
+
+        Assert.True(Directory.Exists(appDir));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(appDir));
+    }
+
+    [Fact]
+    public void Remove_CleansAllLauncherVariantsAndPayload()
+    {
+        // A legacy .cmd shim left next to a newer .exe: both must be removed.
+        File.WriteAllText(Path.Combine(_installDir, "mytool.exe"), "");
+        File.WriteAllText(Path.Combine(_installDir, "mytool.cmd"), "@echo off");
+        string appDir = Path.Combine(_installDir, "_mytool");
+        Directory.CreateDirectory(appDir);
+        File.WriteAllBytes(Path.Combine(appDir, "mytool.dll"), [0x4D, 0x5A]);
+
+        int rc = RemoveCommand.Run(_installDir, ["mytool"]);
+
+        Assert.Equal(0, rc);
+        Assert.False(File.Exists(Path.Combine(_installDir, "mytool.exe")));
+        Assert.False(File.Exists(Path.Combine(_installDir, "mytool.cmd")));
+        Assert.False(Directory.Exists(appDir));
+    }
+
+    [Fact]
     public void Remove_CleansDanglingLegacySymlinkAndPayload()
     {
         if (OperatingSystem.IsWindows())
