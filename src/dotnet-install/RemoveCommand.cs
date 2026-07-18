@@ -26,23 +26,32 @@ static class RemoveCommand
             // that form as well as the bare command name by normalizing to a logical
             // name used for both the launcher variants and the _<name>/ payload dir.
             string logicalName = LogicalName(name);
+            string effectiveName = logicalName;
 
-            // Guard the pathological case of a command name literally ending in
-            // .exe/.cmd: if the user typed a suffixed name that ALSO matches a distinct
-            // literally-suffixed install, the request is ambiguous — refuse rather than
-            // delete the wrong tool.
-            if (!name.Equals(logicalName, StringComparison.Ordinal) &&
-                FindEntries(installDir, name).Length > 0)
+            // Pathological case: a command name literally ending in .exe/.cmd. If the
+            // typed name was suffix-stripped, decide which install it refers to:
+            //   - only the stripped tool exists  -> remove it (the ls-shown launcher)
+            //   - only the literal tool exists    -> remove that instead
+            //   - both exist                      -> genuinely ambiguous, refuse
+            if (!name.Equals(logicalName, StringComparison.Ordinal))
             {
-                Console.Error.WriteLine(
-                    $"Ambiguous: '{name}' could mean tool '{logicalName}' or '{name}'. Remove one at a time using its exact installed name.");
-                exitCode = 1;
-                continue;
+                bool literalExists = FindEntries(installDir, name).Length > 0;
+                bool strippedExists = FindEntries(installDir, logicalName).Length > 0;
+
+                if (literalExists && strippedExists)
+                {
+                    Console.Error.WriteLine(
+                        $"Ambiguous: '{name}' could mean tool '{logicalName}' or '{name}'. Remove one at a time using its exact installed name.");
+                    exitCode = 1;
+                    continue;
+                }
+
+                effectiveName = literalExists ? name : logicalName;
             }
 
             // Find all launcher variants for the tool (a legacy install may leave a
             // <name>.cmd shim next to a newer <name>.exe; clean up both).
-            string[] entryPaths = FindEntries(installDir, logicalName);
+            string[] entryPaths = FindEntries(installDir, effectiveName);
 
             if (entryPaths.Length == 0)
             {
@@ -54,7 +63,7 @@ static class RemoveCommand
             string? target = null;
 
             // Also remove the _appname directory if it exists (legacy payload)
-            string appDir = Path.Combine(installDir, $"_{logicalName}");
+            string appDir = Path.Combine(installDir, $"_{effectiveName}");
             if (Directory.Exists(appDir))
                 Directory.Delete(appDir, true);
 
