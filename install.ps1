@@ -2,7 +2,7 @@
 # Usage: irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1 | iex
 #
 # Downloads a pre-built Native AOT binary from GitHub Releases,
-# places it in ~/.dotnet/bin/, and runs `dotnet-install setup`
+# places it in ~/.dotnet/bin/, and runs `dotnet-install doctor --fix`
 # to configure your PATH.
 #
 # Environment variables:
@@ -82,8 +82,8 @@ try {
 
     Write-Host "dotnet-install: installed to $dest"
 
-    # Run setup to configure PATH
-    & $dest setup
+    # Run doctor to configure PATH
+    & $dest doctor --fix
 }
 finally {
     Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue

@@ -140,7 +140,7 @@ dotnet install update <tool>     # update installed tools
 dotnet install search <query>    # search NuGet
 dotnet install info <tool>       # show tool details
 dotnet install outdated          # check for newer versions
-dotnet install setup             # configure PATH + DOTNET_TOOL_BIN
+dotnet install doctor            # configure PATH + DOTNET_TOOL_BIN
 dotnet install env               # print environment info
 dotnet install completion        # shell completion setup
 ```
