@@ -22,25 +22,56 @@ static class RemoveCommand
                 continue;
             }
 
-            // Find the tool entry (symlink, binary, or .cmd shim)
-            string? entryPath = FindEntry(installDir, name);
+            // On Windows `ls` shows the physical launcher name (e.g. foo.exe); accept
+            // that form as well as the bare command name by normalizing to a logical
+            // name used for both the launcher variants and the _<name>/ payload dir.
+            string logicalName = LogicalName(name);
+            string effectiveName = logicalName;
 
-            if (entryPath is null)
+            // Pathological case: a command name literally ending in .exe/.cmd. If the
+            // typed name was suffix-stripped, decide which install it refers to:
+            //   - only the stripped tool exists  -> remove it (the ls-shown launcher)
+            //   - only the literal tool exists    -> remove that instead
+            //   - both exist                      -> genuinely ambiguous, refuse
+            if (!name.Equals(logicalName, StringComparison.Ordinal))
+            {
+                bool literalExists = FindEntries(installDir, name).Length > 0;
+                bool strippedExists = FindEntries(installDir, logicalName).Length > 0;
+
+                if (literalExists && strippedExists)
+                {
+                    Console.Error.WriteLine(
+                        $"Ambiguous: '{name}' could mean tool '{logicalName}' or '{name}'. Remove one at a time using its exact installed name.");
+                    exitCode = 1;
+                    continue;
+                }
+
+                effectiveName = literalExists ? name : logicalName;
+            }
+
+            // Find all launcher variants for the tool (a legacy install may leave a
+            // <name>.cmd shim next to a newer <name>.exe; clean up both).
+            string[] entryPaths = FindEntries(installDir, effectiveName);
+
+            if (entryPaths.Length == 0)
             {
                 Console.Error.WriteLine($"Not found: {name}");
                 exitCode = 1;
                 continue;
             }
 
-            var info = new FileInfo(entryPath);
-            string? target = info.LinkTarget;
+            string? target = null;
 
-            // Also remove the _appname directory if it exists (multi-file installs)
-            string appDir = Path.Combine(installDir, $"_{name}");
+            // Also remove the _appname directory if it exists (legacy payload)
+            string appDir = Path.Combine(installDir, $"_{effectiveName}");
             if (Directory.Exists(appDir))
                 Directory.Delete(appDir, true);
 
-            File.Delete(entryPath);
+            foreach (string entryPath in entryPaths)
+            {
+                target ??= new FileInfo(entryPath).LinkTarget;
+                File.Delete(entryPath);
+            }
 
             if (target is not null)
                 Console.WriteLine($"Removed: {name} (was -> {target})");
@@ -51,20 +82,52 @@ static class RemoveCommand
         return exitCode;
     }
 
-    static string? FindEntry(string installDir, string name)
+    static string LogicalName(string name)
     {
-        // Direct match
-        string path = Path.Combine(installDir, name);
-        if (File.Exists(path)) return path;
+        // On Windows the launcher carries a .exe (current) or legacy .cmd extension,
+        // and `ls` prints that physical name; strip it to the logical command name so
+        // `remove foo` and `remove foo.exe` behave the same. On Unix the command name
+        // is used verbatim (dots are meaningful), so never strip.
+        if (OperatingSystem.IsWindows() &&
+            (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+             name.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)))
+        {
+            return name[..^4];
+        }
 
-        // With .exe
-        path = Path.Combine(installDir, name + ".exe");
-        if (File.Exists(path)) return path;
+        return name;
+    }
 
-        // With .cmd (Windows shim)
-        path = Path.Combine(installDir, name + ".cmd");
-        if (File.Exists(path)) return path;
+    static string[] FindEntries(string installDir, string name)
+    {
+        // On Windows a tool is installed as <name>.exe, possibly with a legacy
+        // <name>.cmd shim beside it — those are the only launcher forms, so clean up
+        // both. A bare extensionless top-level launcher is never produced on Windows,
+        // so it is deliberately excluded (including it could conflate two distinct
+        // tools whose names differ only by an .exe/.cmd suffix). On Unix the command
+        // name is used verbatim, and <name>.exe / <name>.cmd would be unrelated tools,
+        // so only the exact entry (or its dangling legacy symlink) is ours to remove.
+        string[] candidates = OperatingSystem.IsWindows()
+            ? [name + ".exe", name + ".cmd"]
+            : [name];
 
-        return null;
+        var found = new List<string>();
+        foreach (string candidate in candidates)
+        {
+            string path = Path.Combine(installDir, candidate);
+            // File.Exists follows symlinks, so a legacy launcher whose target is
+            // already gone would be missed; match it as a link entry directly so
+            // its stale _<name>/ payload can still be cleaned up.
+            if (File.Exists(path) || IsSymlink(path))
+                found.Add(path);
+        }
+
+        return found.ToArray();
+    }
+
+    static bool IsSymlink(string path)
+    {
+        try { return new FileInfo(path).LinkTarget is not null; }
+        catch { return false; }
     }
 }

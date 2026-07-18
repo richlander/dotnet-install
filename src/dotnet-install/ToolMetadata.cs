@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 /// </summary>
 static class ToolMetadata
 {
-    const string FileName = ".tool.json";
+    internal const string FileName = ".tool.json";
 
     internal static string GetPath(string toolDir) =>
         Path.Combine(toolDir, FileName);

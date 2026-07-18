@@ -19,8 +19,7 @@ static class InfoCommand
         string appDir = Path.Combine(installDir, $"_{toolName}");
         var manifest = Directory.Exists(appDir) ? ToolMetadata.Read(appDir) : null;
 
-        // All installed tools are single-file native executables.
-        string type = "single-file";
+        string type = InstallLayout.ClassifyType(installDir, toolName, info);
 
         // Calculate size
         long totalSize = info.Length;

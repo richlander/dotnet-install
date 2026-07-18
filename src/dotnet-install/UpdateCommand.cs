@@ -370,8 +370,11 @@ static class UpdateCommand
 
             try { File.Delete(backupBinary); } catch { }
 
-            // Update metadata
-            string toolDir = Path.Combine(installDir, $"_{tool.Name}");
+            // Update metadata; purge any legacy managed payload/launcher so the
+            // refreshed single-file binary is no longer classified as legacy.
+            InstallLayout.RemoveLegacyLauncher(installDir, tool.Name);
+            InstallLayout.ResetMetadataDirectory(installDir, tool.Name);
+            string toolDir = InstallLayout.MetadataDirectory(installDir, tool.Name);
             ToolMetadata.Write(toolDir, new ToolManifest
             {
                 Source = new InstallSource
