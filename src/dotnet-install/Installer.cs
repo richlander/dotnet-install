@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Xml.Linq;
 using System.Runtime.InteropServices;
+using DotnetInspector.Services;
 using NuGetFetch;
 
 static class Installer
@@ -416,22 +417,17 @@ static class Installer
         var settingsFiles = Directory.GetFiles(extractPath, "DotnetToolSettings.xml", SearchOption.AllDirectories);
         foreach (string f in settingsFiles)
         {
-            var doc = System.Xml.Linq.XDocument.Load(f);
-            var ridPackages = doc.Descendants("RuntimeIdentifierPackage").ToList();
-            if (ridPackages.Count == 0)
+            var ridPackages = DotnetToolSettingsParser.Parse(f)?.RuntimeIdentifierPackages;
+            if (ridPackages is null || ridPackages.Count == 0)
                 continue;
 
             // Find the best matching RID-specific package
             foreach (string candidateRid in ridFallbacks)
             {
                 var match = ridPackages.FirstOrDefault(rp =>
-                    string.Equals(rp.Attribute("RuntimeIdentifier")?.Value, candidateRid, StringComparison.OrdinalIgnoreCase));
-                if (match is not null)
-                {
-                    string? packageId = match.Attribute("Id")?.Value;
-                    if (!string.IsNullOrEmpty(packageId))
-                        return packageId;
-                }
+                    string.Equals(rp.RuntimeIdentifier, candidateRid, StringComparison.OrdinalIgnoreCase));
+                if (match is not null && !string.IsNullOrEmpty(match.PackageId))
+                    return match.PackageId;
             }
         }
 
@@ -448,8 +444,7 @@ static class Installer
         var candidates = Directory.GetFiles(extractPath, "DotnetToolSettings.xml", SearchOption.AllDirectories)
             .Select(f =>
             {
-                var doc = System.Xml.Linq.XDocument.Load(f);
-                var command = doc.Descendants("Command").FirstOrDefault();
+                var command = DotnetToolSettingsParser.Parse(f)?.Commands?.FirstOrDefault();
                 if (command is null) return null;
 
                 string dir = Path.GetDirectoryName(f)!;
@@ -464,9 +459,9 @@ static class Installer
                 return new
                 {
                     Settings = new ToolSettings(
-                        CommandName: command.Attribute("Name")?.Value ?? "",
-                        EntryPoint: command.Attribute("EntryPoint")?.Value ?? "",
-                        Runner: command.Attribute("Runner")?.Value ?? "",
+                        CommandName: command.Name,
+                        EntryPoint: command.EntryPoint ?? "",
+                        Runner: command.Runner ?? "",
                         ToolDirectory: dir),
                     RidPriority = ridIndex,
                     Tfm = dirTfm
