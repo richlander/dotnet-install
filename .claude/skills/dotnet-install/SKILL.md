@@ -102,10 +102,10 @@ dotnet install app.cs             # file-based app
 Clones (or fetches) a GitHub repo, discovers the project, builds, and installs.
 
 ```bash
-dotnet install --github richlander/dotnet-inspect
-dotnet install --github richlander/dotnet-inspect@v1.0
-dotnet install --github richlander/dotnet-inspect --ssh
-dotnet install --github richlander/dotnet-inspect --project src/Tool/Tool.csproj
+dotnet install --github richlander/dotnet-install
+dotnet install --github richlander/dotnet-install@v0.8.0
+dotnet install --github richlander/dotnet-install --ssh
+dotnet install --github richlander/dotnet-install --project src/dotnet-install/dotnet-install.csproj
 ```
 
 If the user types `owner/repo` without `--github`,
@@ -117,8 +117,8 @@ the tool prompts for confirmation before cloning
 Downloads and installs a pre-built tool from NuGet.
 
 ```bash
-dotnet install --package dotnetsay
-dotnet install --package dotnet-counters@9.0.0
+dotnet install --package dotnet-inspect
+dotnet install --package dotnet-inspect@0.16.0
 ```
 
 ### Multiple tools at once
@@ -127,8 +127,8 @@ Positional args can mix sources. When multiple args
 are given, confirmation prompts are skipped.
 
 ```bash
-dotnet install dotnetsay dotnet-counters    # two NuGet packages
-dotnet install richlander/dotnetsay app.cs  # GitHub + local file-based app
+dotnet install dotnet-inspect dotnet-install       # two NuGet packages
+dotnet install richlander/dotnet-install app.cs    # GitHub + local file-based app
 ```
 
 ## Subcommands

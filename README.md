@@ -5,9 +5,9 @@ Install .NET executables to PATH — like `cargo install` and `go install`.
 Built with .NET, AOT-compiled, no runtime required.
 
 ```bash
-dotnet-install .                              # Build & install current project
-dotnet-install --package dotnetsay            # Install from NuGet
-dotnet-install --github richlander/my-tool    # Install from GitHub
+dotnet-install .                                  # Build & install current project
+dotnet-install --package dotnet-inspect           # Install from NuGet
+dotnet-install --github richlander/dotnet-install # Install from GitHub
 ```
 
 dotnet-install installs **single-file executables only** — Native AOT or
@@ -78,45 +78,42 @@ dotnet-install .
 dotnet-install src/my-tool
 
 # From NuGet
-dotnet-install --package dotnetsay
-dotnet-install --package dotnet-outdated-tool
+dotnet-install --package dotnet-inspect
+dotnet-install --package dotnet-inspect@0.16.0
 
 # From GitHub
-dotnet-install --github richlander/dotnet-runtimeinfo
+dotnet-install --github richlander/dotnet-install
 ```
 
 ### List installed tools
 
 ```bash
 $ dotnet-install ls
-NAME            TYPE
-dotnet-inspect  single-file
-dotnet-install  single-file
-dotnetsay       single-file
+NAME            VERSION  TYPE         SOURCE
+dotnet-inspect  0.16.0   single-file  nuget
+dotnet-install  0.8.0    single-file  github
 ```
 
 Use `--no-header` for scripting:
 
 ```bash
 $ dotnet-install ls --no-header
-dotnet-inspect  single-file
-dotnet-install  single-file
-dotnetsay       single-file
+dotnet-inspect  0.16.0   single-file  nuget
+dotnet-install  0.8.0    single-file  github
 ```
 
 ### Update all tools
 
 ```bash
 $ dotnet-install update
-dotnet-inspect (local 99c56b9)... uncommitted changes, rebuilding
-dotnet-runtimeinfo (richlander/dotnet-runtimeinfo 40de536)... up to date
-dotnetsay (dotnetsay 3.0.3)... up to date
+dotnet-inspect (dotnet-inspect 0.16.0)... up to date
+dotnet-install (richlander/dotnet-install 40de536)... up to date
 ```
 
 ### Remove tools
 
 ```bash
-dotnet-install rm dotnetsay
+dotnet-install rm dotnet-inspect
 ```
 
 ### Unsupported tools
@@ -167,25 +164,35 @@ Managed or multi-file tools aren't supported here — install those with
 ## Commands and options
 
 ```text
-dotnet-install [<project-path>] [command] [options]
-
-Commands:
-  doctor         Configure shell PATH and check setup
-  ls (list)      List installed tools
-  update <tool>  Check for updates and reinstall
-  rm (remove)    Remove installed tools
+dotnet-install [<project>] [command] [options]
 
 Options:
   --package <name[@version]>   Install a tool from NuGet
   --github <owner/repo[@ref]>  Install from a GitHub repository
-  --project <path>             Path to .csproj within a git repo
-  -o, --output <dir>           Installation directory (default: ~/.dotnet/bin/)
-  --local-bin                  Install to ~/.local/bin/
-  --require-sourcelink         Require SourceLink metadata
+  --git <url>                  Install from a git URL
+  --branch <name>              Git branch to track (updatable)
+  --tag <name>                 Git tag to install (pinned)
+  --rev <sha>                  Git commit SHA to install (pinned)
+  --path, --project <path>     Path to project (or sub-path within a git repo)
+  -o, --output <dir>           Installation directory (overrides default)
+  --local-bin                  Install to ~/.local/bin/ instead of ~/.dotnet/bin/
   --ssh                        Clone using SSH instead of HTTPS
-  --no-header                  Suppress column headers (list command)
-  -h, --help                   Show help
-  --version                    Show version
+  --require-sourcelink         Require SourceLink metadata in installed assemblies
+  -h, --help                   Show help and usage information
+  --version                    Show version information
+
+Commands:
+  doctor                Check environment setup
+  config <key> <value>  View and update settings
+  ls                    List installed tools
+  update <tool>         Check for updates and reinstall
+  rm <tool>             Remove installed tools
+  search <query>        Search NuGet for tool packages
+  info <tool>           Show detailed information about an installed tool
+  outdated              Check for available updates without installing
+  completion <shell>    Generate shell completion script
+  env                   Print environment information
+  skill                 Print the AI skill definition for this tool
 ```
 
 ## Design
