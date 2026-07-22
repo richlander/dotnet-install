@@ -79,6 +79,7 @@ dotnet-install src/my-tool
 
 # From NuGet
 dotnet-install --package dotnet-inspect
+dotnet-install --package dotnet-runtimeinfo
 dotnet-install --package dotnet-inspect@0.16.0
 
 # From GitHub
@@ -89,25 +90,25 @@ dotnet-install --github richlander/dotnet-install
 
 ```bash
 $ dotnet-install ls
-NAME            VERSION  TYPE         SOURCE
-dotnet-inspect  0.16.0   single-file  nuget
-dotnet-install  0.8.0    single-file  github
+NAME                VERSION  TYPE         SOURCE
+dotnet-inspect      0.16.0   single-file  nuget
+dotnet-runtimeinfo  3.0.1    single-file  nuget
 ```
 
 Use `--no-header` for scripting:
 
 ```bash
 $ dotnet-install ls --no-header
-dotnet-inspect  0.16.0   single-file  nuget
-dotnet-install  0.8.0    single-file  github
+dotnet-inspect      0.16.0   single-file  nuget
+dotnet-runtimeinfo  3.0.1    single-file  nuget
 ```
 
 ### Update all tools
 
 ```bash
 $ dotnet-install update
-dotnet-inspect (dotnet-inspect 0.16.0)... up to date
-dotnet-install (richlander/dotnet-install 40de536)... up to date
+dotnet-inspect (dotnet-inspect.osx-arm64 0.16.0)... up to date
+dotnet-runtimeinfo (dotnet-runtimeinfo.osx-arm64 3.0.1)... up to date
 ```
 
 ### Remove tools
