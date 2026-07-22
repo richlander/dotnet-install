@@ -42,4 +42,16 @@
     <InternalsVisibleTo Include="dotnet-install.Tests" />
   </ItemGroup>
 
+  <Target Name="StripSymbolsFromPublishOutput" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true' and '$(PackAsTool)' == 'true'">
+    <ItemGroup>
+      <PublishSymbolFiles Include="$(PublishDir)**/*.pdb" />
+      <PublishSymbolFiles Include="$(PublishDir)**/*.dbg" />
+      <!-- macOS Native AOT emits a .dSYM debug bundle (a directory, so it needs
+           RemoveDir rather than the file glob above). -->
+      <PublishSymbolBundles Include="$([System.IO.Directory]::GetDirectories('$(PublishDir)', '*.dSYM'))" />
+    </ItemGroup>
+    <Delete Files="@(PublishSymbolFiles)" />
+    <RemoveDir Directories="@(PublishSymbolBundles)" />
+  </Target>
+
 </Project>
