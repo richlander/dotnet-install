@@ -134,6 +134,22 @@ Install this managed tool with the .NET SDK instead:
   dotnet tool install -g some-managed-tool
 ```
 
+### Already installed as a .NET SDK tool
+
+If the same command is already on your PATH — most often because it was
+installed with `dotnet tool install -g` — dotnet-install refuses rather than
+add a second copy that would shadow the first:
+
+```bash
+$ dotnet-install --package dotnet-inspect
+error: a 'dotnet-inspect' command is already on your PATH:
+  ~/.dotnet/tools/dotnet-inspect  (.NET SDK tool)
+
+Installing it with dotnet-install would put a second copy on your PATH.
+Uninstall the .NET SDK tool first, then re-run this command:
+  dotnet tool uninstall -g dotnet-inspect
+```
+
 ## How it works
 
 Every tool is a single-file native executable, placed directly on PATH —

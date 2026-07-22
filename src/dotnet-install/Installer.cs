@@ -52,6 +52,15 @@ static class Installer
 
         string mode = info.IsNativeAot ? "Native AOT" : "single-file";
 
+        // Refuse to shadow a tool already on PATH (e.g. installed via
+        // `dotnet tool install -g`). Check before the (expensive) publish so we fail fast.
+        if (!quiet)
+        {
+            var conflict = GlobalToolCheck.Find(appName, installDir);
+            if (conflict is not null)
+                return GlobalToolCheck.Report(appName, conflict);
+        }
+
         // Pre-flight: warn if the project's TFM may not be buildable
         if (info.TargetFramework is not null)
             CheckSdkCompatibility(info.TargetFramework);
@@ -253,6 +262,16 @@ static class Installer
             {
                 Console.Error.WriteLine($"error: package declares an invalid command name '{commandName}'.");
                 return 1;
+            }
+
+            // Refuse to shadow a tool already on PATH (e.g. installed via
+            // `dotnet tool install -g`). Two same-named executables on PATH is
+            // confusing; ask the user to pick one.
+            if (!quiet)
+            {
+                var conflict = GlobalToolCheck.Find(commandName, installDir);
+                if (conflict is not null)
+                    return GlobalToolCheck.Report(commandName, conflict);
             }
 
             // SourceLink verification (before placement)
