@@ -14,6 +14,9 @@
     <Description>Install .NET executables to PATH — like cargo install and go install</Description>
     <!-- RID-specific tool packaging: Native AOT for common platforms, CoreCLR fallback for others -->
     <ToolPackageRuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
+    <!-- Keep debug symbols (.pdb/.dbg and the macOS .dSYM bundle) out of the
+         published tool package. -->
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
@@ -41,17 +44,5 @@
   <ItemGroup>
     <InternalsVisibleTo Include="dotnet-install.Tests" />
   </ItemGroup>
-
-  <Target Name="StripSymbolsFromPublishOutput" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true' and '$(PackAsTool)' == 'true'">
-    <ItemGroup>
-      <PublishSymbolFiles Include="$(PublishDir)**/*.pdb" />
-      <PublishSymbolFiles Include="$(PublishDir)**/*.dbg" />
-      <!-- macOS Native AOT emits a .dSYM debug bundle (a directory, so it needs
-           RemoveDir rather than the file glob above). -->
-      <PublishSymbolBundles Include="$([System.IO.Directory]::GetDirectories('$(PublishDir)', '*.dSYM'))" />
-    </ItemGroup>
-    <Delete Files="@(PublishSymbolFiles)" />
-    <RemoveDir Directories="@(PublishSymbolBundles)" />
-  </Target>
 
 </Project>
