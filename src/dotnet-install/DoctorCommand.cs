@@ -58,6 +58,12 @@ static class DoctorCommand
 
         if (shellConfig.RcFile is not null && shellConfig.RcFileContainsPath())
         {
+            // Rc file references the install dir, but the env file it sources may be
+            // missing (e.g. deleted, or configured by a legacy inline export). Ensure
+            // it exists so the source command below actually works.
+            if (!File.Exists(shellConfig.EnvFileAbsolute))
+                WriteEnvFile(shellConfig);
+
             Console.WriteLine();
             Console.WriteLine($"To configure your current shell, run:");
             Console.WriteLine();
