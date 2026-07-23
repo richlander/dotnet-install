@@ -29,8 +29,8 @@ dotnet-install --project src/my-tool          # explicit (like dotnet run --proj
 dotnet-install app.cs                         # file-based app
 
 # NuGet package (no SDK required)
-dotnet-install --package dotnetsay
-dotnet-install --package dotnet-counters@9.0.0  # pinned version
+dotnet-install --package dotnet-inspect
+dotnet-install --package dotnet-inspect@0.16.0  # pinned version
 
 # GitHub repository
 dotnet-install --github owner/repo            # tracks default branch, updatable
