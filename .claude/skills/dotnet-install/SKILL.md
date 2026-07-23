@@ -102,10 +102,10 @@ dotnet install app.cs             # file-based app
 Clones (or fetches) a GitHub repo, discovers the project, builds, and installs.
 
 ```bash
-dotnet install --github richlander/dotnet-install
-dotnet install --github richlander/dotnet-install@v0.8.0
-dotnet install --github richlander/dotnet-install --ssh
-dotnet install --github richlander/dotnet-install --project src/dotnet-install/dotnet-install.csproj
+dotnet install --github richlander/dotnet-runtimeinfo
+dotnet install --github richlander/dotnet-runtimeinfo@v3.0.1
+dotnet install --github richlander/dotnet-runtimeinfo --ssh
+dotnet install --github richlander/dotnet-runtimeinfo --project dotnet-runtimeinfo.csproj
 ```
 
 If the user types `owner/repo` without `--github`,
@@ -127,8 +127,8 @@ Positional args can mix sources. When multiple args
 are given, confirmation prompts are skipped.
 
 ```bash
-dotnet install dotnet-inspect dotnet-install       # two NuGet packages
-dotnet install richlander/dotnet-install app.cs    # GitHub + local file-based app
+dotnet install dotnet-inspect dotnet-runtimeinfo    # two NuGet packages
+dotnet install richlander/dotnet-runtimeinfo app.cs # GitHub + local file-based app
 ```
 
 ## Subcommands

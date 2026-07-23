@@ -5,9 +5,9 @@ Install .NET executables to PATH — like `cargo install` and `go install`.
 Built with .NET, AOT-compiled, no runtime required.
 
 ```bash
-dotnet-install .                                  # Build & install current project
-dotnet-install --package dotnet-inspect           # Install from NuGet
-dotnet-install --github richlander/dotnet-install # Install from GitHub
+dotnet-install .                                      # Build & install current project
+dotnet-install --package dotnet-inspect               # Install from NuGet
+dotnet-install --github richlander/dotnet-runtimeinfo # Install from GitHub
 ```
 
 dotnet-install installs **single-file executables only** — Native AOT or
@@ -83,7 +83,7 @@ dotnet-install --package dotnet-runtimeinfo
 dotnet-install --package dotnet-inspect@0.16.0
 
 # From GitHub
-dotnet-install --github richlander/dotnet-install
+dotnet-install --github richlander/dotnet-runtimeinfo
 ```
 
 ### List installed tools
