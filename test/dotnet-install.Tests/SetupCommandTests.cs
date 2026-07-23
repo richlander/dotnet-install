@@ -133,6 +133,22 @@ public class SetupCommandTests : IDisposable
     }
 
     [Fact]
+    public void Zsh_UsesZshenvAndPosixEnvFile()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string dir = Path.Combine(home, ".dotnet", "bin");
+        var config = ShellConfig.Detect(dir) with { ShellName = "zsh", RcFile = "~/.zshenv" };
+
+        // zsh uses the POSIX env file (not env.fish) and dot-source syntax.
+        Assert.Equal("~/.zshenv", config.RcFile);
+        Assert.Equal("env", config.EnvFileName);
+        Assert.StartsWith(". \"", config.SourceCommand);
+        Assert.Contains("/env\"", config.SourceCommand);
+        Assert.Contains("#!/bin/sh", config.EnvFileContent);
+        Assert.Contains("export DOTNET_TOOL_BIN=", config.EnvFileContent);
+    }
+
+    [Fact]
     public void RcLine_UsesFishAddPathForFish()
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -228,5 +244,28 @@ public class SetupCommandTests : IDisposable
         config = config with { RcFileAbsolute = fakeRc };
 
         Assert.True(config.RcFileContainsPath());
+    }
+
+    [Fact]
+    public void RcFileContainsPath_IgnoresUnrelatedEnvSubstring()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string dir = Path.Combine(home, ".dotnet", "bin");
+        var config = ShellConfig.Detect(dir);
+
+        if (config.RcFileAbsolute is null)
+            return;
+
+        // Rc files commonly contain the substring "env" via unrelated tools
+        // (e.g. `brew shellenv`, `dotnetup print-env-script`). These must not be
+        // mistaken for dotnet-install PATH configuration.
+        string fakeRc = Path.Combine(_tempDir, "fake_rc");
+        File.WriteAllText(fakeRc,
+            "eval \"$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)\"\n" +
+            "eval \"$('/home/rich/.local/bin/dotnetup' print-env-script --shell bash)\"\n");
+
+        config = config with { RcFileAbsolute = fakeRc };
+
+        Assert.False(config.RcFileContainsPath());
     }
 }

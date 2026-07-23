@@ -114,8 +114,7 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
             return false;
 
         string content = File.ReadAllText(RcFileAbsolute);
-        return content.Contains(EnvFileName) ||
-               content.Contains(EnvVar) ||
+        return content.Contains(EnvVar) ||
                content.Contains(DisplayDir.Replace("~", "$HOME")) ||
                content.Contains(DisplayDir);
     }
