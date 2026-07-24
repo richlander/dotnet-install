@@ -77,9 +77,9 @@ storing things under `~/.nuget/`.
 For GitHub repos with multiple projects, resolution order:
 
 1. `--project` flag (explicit path)
-2. `.dotnet-install.json` `bundle` — a toolset the repo advertises; every
-   listed project is built and installed together (see below)
-3. `.dotnet-install.json` `project` manifest field in repo root
+2. `.dotnet-install/.dotnet-install.json` `bundle` — a toolset the repo
+   advertises; every listed project is built and installed together (see below)
+3. `.dotnet-install/.dotnet-install.json` `project` field
 4. Auto-detect `Exe` projects in the repo
 5. File-based apps (`.cs` with `#:property` directives)
 
@@ -88,11 +88,24 @@ arrow-key selector is presented.
 
 ## Bundles (repo toolsets)
 
-A repo can advertise a set of tools to install from its root by listing
-repo-relative projects in a `bundle` array in `.dotnet-install.json`:
+The `.dotnet-install.json` manifest appears in two places, with the same
+filename and schema:
+
+- **Colocated** — in a directory you point the tool at directly (a project
+  directory / local path). Describes that one tool (`exe`, `update`).
+- **Repo** — at `.dotnet-install/.dotnet-install.json`, read when installing via
+  the repo gesture (`--github`/`--git`). The repo root itself is never scanned —
+  only the `.dotnet-install/` directory. This mirrors `.claude-plugin/` for
+  skills, where the advertise manifest lives in a well-known directory rather
+  than bare at the root.
+
+A repo advertises a set of tools by listing repo-relative projects in a
+`bundle` array in `.dotnet-install/.dotnet-install.json`:
 
 ```json
 {
+  "version": 3,
+  "name": "my-toolset",
   "bundle": [
     { "project": "src/tool-a/tool-a.csproj" },
     { "project": "src/tool-b/tool-b.csproj" }
@@ -101,12 +114,38 @@ repo-relative projects in a `bundle` array in `.dotnet-install.json`:
 ```
 
 This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted
-to build-from-source: the entries reference projects in the repo rather than
-NuGet package ids. Installing from the repo root (`--github`, `--git`, or a
-local checkout) builds and installs every entry, recording per-tool provenance
-so each updates independently. Installation stops at the first failure and
-leaves already-installed tools in place. An explicit `--project` overrides the
-bundle.
+to build-from-source: the entries reference projects in the repo (the "local"
+flavor) rather than NuGet package ids. Installing from the repo root
+(`--github`, `--git`, or a local checkout) builds and installs every entry,
+recording per-tool provenance so each updates independently. Installation stops
+at the first failure and leaves already-installed tools in place. An explicit
+`--project` overrides the bundle.
+
+## DotNetCliTool v3 packages
+
+When a NuGet package carries a `tools/manifest.json` with `"version": 3`,
+`dotnet-install` treats it as a [DotNetCliTool v3][v3] package and dispatches
+on its shape:
+
+- **Pointer (index)** — the manifest lists RID-specific packages in an `index`.
+  The installer picks the best match for the current platform using the RID
+  fallback chain (exact RID → portable → `any`) and redirects to that package
+  at the same version.
+- **Pointer (bundle)** — the manifest lists other packages in a `bundle`. Each
+  is installed in turn (an exact-match range like `[9.0.661903]` pins the
+  version; a bare id installs latest). Installation stops at the first failure
+  and leaves already-installed members in place.
+- **RID-specific** — the manifest has a `descriptor` (its RID/id) and
+  `commands`. Native single-file payloads under `tools/<rid>/` are placed into
+  the install directory like any other single-file tool.
+
+Consistent with the single-file scope, a v3 payload that resolves to the
+managed `any` fallback (a command with `"runner": "dotnet"` or a `.dll`
+entry point) is not installed; the tool directs the user to
+`dotnet tool install`. Package-controlled RIDs and entry-point names are
+validated against path traversal before any file is placed.
+
+[v3]: https://github.com/dotnet/designs/blob/main/accepted/2026/dotnet-cli-tools-v3.md
 
 ## Bootstrap
 

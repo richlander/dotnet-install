@@ -216,6 +216,12 @@ static class Installer
 
         try
         {
+            // v3 package? tools/manifest.json with "version": 3 takes precedence over
+            // the v1/v2 DotnetToolSettings.xml layout.
+            var v3 = V3Manifest.TryRead(extractPath);
+            if (v3 is not null && v3.Version == V3Manifest.SpecVersion)
+                return await InstallV3Async(v3, packageName, version, installDir, requireSourceLink, quiet, extractPath);
+
             // Check if this is a pointer package with RID-specific satellite packages
             string? ridPackageId = FindRidSpecificPackage(extractPath);
             if (ridPackageId is not null)
@@ -334,6 +340,208 @@ static class Installer
         {
             // extractPath is now in the cache, no temp cleanup needed
         }
+    }
+
+    // ---- DotNetCliTool v3 (tools/manifest.json) ----
+
+    /// <summary>
+    /// Installs a v3 package. Dispatches on manifest shape: bundle (install members),
+    /// index (select a RID and redirect), or descriptor+commands (place the payload).
+    /// </summary>
+    static async Task<int> InstallV3Async(
+        V3Manifest manifest, string packageName, string version, string installDir,
+        bool requireSourceLink, bool quiet, string extractPath)
+    {
+        // Pointer package — bundle of other packages.
+        if (manifest.Bundle is { Count: > 0 } bundle)
+            return await InstallV3BundleAsync(bundle, installDir, requireSourceLink, quiet);
+
+        // Pointer package — RID index. Select a payload package and redirect to it.
+        if (manifest.Index is { Count: > 0 } index)
+        {
+            var selected = V3Manifest.SelectRid(index, GetRidFallbacks(RuntimeInformation.RuntimeIdentifier));
+            if (selected?.Id is null)
+            {
+                Console.Error.WriteLine($"error: '{packageName}' has no payload for this platform ({RuntimeInformation.RuntimeIdentifier}).");
+                Console.Error.WriteLine("The tool author did not publish a compatible RID-specific package.");
+                return 1;
+            }
+
+            // RID packages ship in lockstep with the pointer, so reuse the resolved version.
+            return await InstallPackageAsync($"{selected.Id}@{version}", installDir, requireSourceLink, quiet);
+        }
+
+        // RID-specific package — place the payload described by descriptor + commands.
+        if (manifest.Descriptor is not null && manifest.Commands is { Count: > 0 } commands)
+            return InstallV3Payload(manifest, packageName, version, installDir, requireSourceLink, quiet, extractPath);
+
+        Console.Error.WriteLine($"error: '{packageName}' has a v3 manifest with no index, bundle, or commands.");
+        return 1;
+    }
+
+    /// <summary>
+    /// Installs each member of a v3 bundle. Stops at the first failure, leaving
+    /// already-installed members in place (per the v3 bundle spec).
+    /// </summary>
+    static async Task<int> InstallV3BundleAsync(
+        List<V3BundleRef> bundle, string installDir, bool requireSourceLink, bool quiet)
+    {
+        if (!quiet)
+            Console.WriteLine($"Installing bundle of {bundle.Count} tool{(bundle.Count == 1 ? "" : "s")}...");
+
+        int installed = 0;
+        foreach (var member in bundle)
+        {
+            if (string.IsNullOrEmpty(member.Id))
+            {
+                Console.Error.WriteLine("error: bundle entry is missing an \"id\".");
+                return 1;
+            }
+
+            string? exact = ParseExactVersion(member.Version);
+            string spec = exact is not null ? $"{member.Id}@{exact}" : member.Id;
+
+            if (!quiet)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"[{installed + 1}/{bundle.Count}] {member.Id}");
+            }
+
+            int result = await InstallPackageAsync(spec, installDir, requireSourceLink, quiet);
+            if (result != 0)
+            {
+                Console.Error.WriteLine($"error: failed to install bundle member '{member.Id}'; stopping.");
+                if (installed > 0)
+                    Console.Error.WriteLine($"{installed} tool{(installed == 1 ? "" : "s")} already installed; remove with 'dotnet-install rm <tool>' if needed.");
+                return result;
+            }
+
+            installed++;
+        }
+
+        if (!quiet)
+            Console.WriteLine($"\nInstalled {installed} tool{(installed == 1 ? "" : "s")}.");
+        return 0;
+    }
+
+    /// <summary>
+    /// Places a v3 RID-specific payload. Native BYOR payloads (no runner) are copied
+    /// to <paramref name="installDir"/> (a flat PATH bin). The managed <c>any</c>
+    /// fallback (runner "dotnet") is not handled here — dotnet-install installs native
+    /// single-file tools only — so the user is pointed at <c>dotnet tool install</c>.
+    /// </summary>
+    static int InstallV3Payload(
+        V3Manifest manifest, string packageName, string version, string installDir,
+        bool requireSourceLink, bool quiet, string extractPath)
+    {
+        string rid = manifest.Descriptor!.Rid ?? "";
+        if (!IsSafeFileName(rid))
+        {
+            Console.Error.WriteLine($"error: '{packageName}' declares an invalid RID '{rid}'.");
+            return 1;
+        }
+
+        string payloadDir = Path.Combine(extractPath, "tools", rid);
+
+        foreach (var command in manifest.Commands!)
+        {
+            string? entryPoint = command.EntryPoint;
+            if (string.IsNullOrEmpty(entryPoint) || !IsSafeFileName(entryPoint))
+            {
+                Console.Error.WriteLine($"error: '{packageName}' declares an invalid command entryPoint.");
+                return 1;
+            }
+
+            bool isManaged = string.Equals(command.Runner, "dotnet", StringComparison.OrdinalIgnoreCase)
+                || entryPoint.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+            if (isManaged)
+            {
+                Console.Error.WriteLine($"error: '{packageName}' resolves to a managed (runtime-dependent) fallback on this platform.");
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("dotnet-install installs native single-file tools only.");
+                Console.Error.WriteLine("Install this managed tool with the .NET SDK instead:");
+                Console.Error.WriteLine($"  dotnet tool install -g {packageName}");
+                return 1;
+            }
+
+            string execName = OperatingSystem.IsWindows() && !entryPoint.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? $"{entryPoint}.exe"
+                : entryPoint;
+            string execPath = Path.Combine(payloadDir, execName);
+
+            if (!File.Exists(execPath))
+            {
+                Console.Error.WriteLine($"error: payload '{execName}' not found in package (tools/{rid}/).");
+                return 1;
+            }
+
+            if (!IsSingleFile(payloadDir))
+            {
+                Console.Error.WriteLine($"error: '{packageName}' payload is not a single-file native executable.");
+                Console.Error.WriteLine($"  dotnet tool install -g {packageName}");
+                return 1;
+            }
+
+            if (requireSourceLink && !SourceLinkCheck.Verify(payloadDir))
+            {
+                Console.Error.WriteLine("error: --require-sourcelink specified but SourceLink verification failed");
+                return 1;
+            }
+
+            string commandName = OperatingSystem.IsWindows() && entryPoint.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? entryPoint[..^4]
+                : entryPoint;
+
+            if (!quiet)
+            {
+                var conflict = GlobalToolCheck.Find(commandName, installDir);
+                if (conflict is not null)
+                    return GlobalToolCheck.Report(commandName, conflict);
+            }
+
+            Directory.CreateDirectory(installDir);
+            string installedExecName = OperatingSystem.IsWindows() ? $"{commandName}.exe" : commandName;
+            PlaceSingleFile(execPath, installDir, installedExecName);
+
+            InstallLayout.RemoveLegacyLauncher(installDir, commandName);
+            InstallLayout.ResetMetadataDirectory(installDir, commandName);
+            string metaDir = InstallLayout.MetadataDirectory(installDir, commandName);
+            ToolMetadata.Write(metaDir, new ToolManifest
+            {
+                Source = new InstallSource { Type = "nuget", Package = packageName, Version = version }
+            });
+
+            if (!quiet)
+                Console.WriteLine($"Installed {commandName} ({version}) → {Path.Combine(installDir, commandName)}");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Extracts an exact version from a v3 bundle member's version string. Accepts a
+    /// bare version ("9.0.1") or a NuGet exact-match range ("[9.0.1]"). Returns null
+    /// for a null/empty value (install latest) or a non-exact range.
+    /// </summary>
+    internal static string? ParseExactVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return null;
+
+        string v = version.Trim();
+        if (v.StartsWith('[') || v.StartsWith('('))
+        {
+            // A range bracket is only accepted as an exact match: [x]. Anything else
+            // (open bounds, comma-separated bounds) is not a single resolvable version.
+            if (v.StartsWith('[') && v.EndsWith(']'))
+            {
+                string inner = v[1..^1].Trim();
+                return inner.Length > 0 && !inner.Contains(',') ? inner : null;
+            }
+            return null;
+        }
+
+        return v;
     }
 
     internal record ToolSettings(string CommandName, string EntryPoint, string Runner, string ToolDirectory);
@@ -497,7 +705,7 @@ static class Installer
     /// <summary>
     /// Simplified RID fallback chain. Exact match → portable os-arch → os → unix/win → any.
     /// </summary>
-    static List<string> GetRidFallbacks(string rid)
+    internal static List<string> GetRidFallbacks(string rid)
     {
         // e.g. rid = "osx-arm64"
         var fallbacks = new List<string> { rid };
