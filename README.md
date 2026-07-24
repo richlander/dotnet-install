@@ -178,6 +178,27 @@ executable. Enable Native AOT or self-contained single-file publishing:
 Managed or multi-file tools aren't supported here — install those with
 `dotnet tool install`.
 
+### Advertising a toolset (bundle)
+
+A repo can advertise a set of tools to install together by adding a
+`bundle` array to `.dotnet-install.json` in the repo root. Each entry
+points at a repo-relative project (or file-based app):
+
+```json
+{
+  "bundle": [
+    { "project": "src/tool-a/tool-a.csproj" },
+    { "project": "src/tool-b/tool-b.csproj" }
+  ]
+}
+```
+
+When you install from the repo root — `dotnet-install --github owner/repo`,
+`--git <url>`, or a local checkout — every listed project is built and
+installed. Installation stops at the first failure, leaving already-installed
+tools in place. An explicit `--project` overrides the bundle and installs a
+single tool.
+
 ## Commands and options
 
 ```text

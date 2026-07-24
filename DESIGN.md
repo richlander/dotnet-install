@@ -77,12 +77,36 @@ storing things under `~/.nuget/`.
 For GitHub repos with multiple projects, resolution order:
 
 1. `--project` flag (explicit path)
-2. `.dotnet-install.json` manifest in repo root
-3. Auto-detect `Exe` projects in the repo
-4. File-based apps (`.cs` with `#:property` directives)
+2. `.dotnet-install.json` `bundle` — a toolset the repo advertises; every
+   listed project is built and installed together (see below)
+3. `.dotnet-install.json` `project` manifest field in repo root
+4. Auto-detect `Exe` projects in the repo
+5. File-based apps (`.cs` with `#:property` directives)
 
 If multiple candidates remain (≤12), an interactive
 arrow-key selector is presented.
+
+## Bundles (repo toolsets)
+
+A repo can advertise a set of tools to install from its root by listing
+repo-relative projects in a `bundle` array in `.dotnet-install.json`:
+
+```json
+{
+  "bundle": [
+    { "project": "src/tool-a/tool-a.csproj" },
+    { "project": "src/tool-b/tool-b.csproj" }
+  ]
+}
+```
+
+This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted
+to build-from-source: the entries reference projects in the repo rather than
+NuGet package ids. Installing from the repo root (`--github`, `--git`, or a
+local checkout) builds and installs every entry, recording per-tool provenance
+so each updates independently. Installation stops at the first failure and
+leaves already-installed tools in place. An explicit `--project` overrides the
+bundle.
 
 ## Bootstrap
 

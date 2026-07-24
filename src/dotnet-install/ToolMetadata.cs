@@ -123,6 +123,14 @@ class ToolConfig
     public InstallSource? Update { get; set; }
 
     /// <summary>
+    /// Optional toolset advertised by the repo. When present and installing from
+    /// the repo root, every listed project is built and installed together.
+    /// </summary>
+    [JsonPropertyName("bundle")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<BundleEntry>? Bundle { get; set; }
+
+    /// <summary>
     /// Read config from a directory (typically repo root). Returns null if not found.
     /// </summary>
     internal static ToolConfig? Read(string directory)
@@ -140,6 +148,18 @@ class ToolConfig
             return null;
         }
     }
+}
+
+/// <summary>
+/// A single entry in a repo's advertised tool bundle. Points at a
+/// repo-relative project (or file-based app) to build and install.
+/// </summary>
+class BundleEntry
+{
+    /// <summary>Repo-relative path to the project or file-based app to install.</summary>
+    [JsonPropertyName("project")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Project { get; set; }
 }
 
 [JsonSerializable(typeof(ToolManifest))]

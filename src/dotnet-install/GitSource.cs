@@ -84,6 +84,21 @@ static class GitSource
 
         var config = ToolConfig.Read(repoDir);
 
+        // A repo can advertise a toolset ("bundle"). When present and no explicit
+        // project override is given, build and install every listed project.
+        if (projectOverride is null && config?.Bundle is { Count: > 0 } bundle)
+        {
+            var bundleSource = new InstallSource
+            {
+                Type = "git",
+                Repository = url,
+                Ref = gitRef,
+                Commit = commitSha,
+                Pinned = pinned
+            };
+            return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
+        }
+
         string? projectFile = DiscoverProject(repoDir, projectOverride);
         if (projectFile is null)
             return 1;
@@ -202,6 +217,22 @@ static class GitSource
 
         // Read repo config (.dotnet-install.json) for exe name and update plan
         var config = ToolConfig.Read(repoDir);
+
+        // A repo can advertise a toolset ("bundle"). When present and no explicit
+        // project override is given, build and install every listed project.
+        if (projectOverride is null && config?.Bundle is { Count: > 0 } bundle)
+        {
+            var bundleSource = new InstallSource
+            {
+                Type = "github",
+                Repository = $"{owner}/{repo}",
+                Ref = gitRef,
+                Commit = commitSha,
+                Ssh = useSsh,
+                Pinned = pinned
+            };
+            return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
+        }
 
         // Discover project
         string? projectFile = DiscoverProject(repoDir, projectOverride);
