@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Xml.Linq;
 
 static class GitSource
@@ -82,7 +80,7 @@ static class GitSource
         // Capture commit SHA for provenance tracking
         string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
 
-        var config = ToolConfig.Read(repoDir);
+        var config = ToolConfig.ReadFromRepo(repoDir);
 
         // A repo can advertise a toolset ("bundle"). When present and no explicit
         // project override is given, build and install every listed project.
@@ -216,7 +214,7 @@ static class GitSource
         string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
 
         // Read repo config (.dotnet-install.json) for exe name and update plan
-        var config = ToolConfig.Read(repoDir);
+        var config = ToolConfig.ReadFromRepo(repoDir);
 
         // A repo can advertise a toolset ("bundle"). When present and no explicit
         // project override is given, build and install every listed project.
@@ -269,27 +267,15 @@ static class GitSource
             return full;
         }
 
-        // 2. Repo manifest (.dotnet-install.json)
-        string manifest = Path.Combine(repoDir, ".dotnet-install.json");
-        if (File.Exists(manifest))
+        // 2. Repo manifest (.dotnet-install/.dotnet-install.json)
+        var repoManifest = ToolConfig.ReadFromRepo(repoDir);
+        if (repoManifest?.Project is not null)
         {
-            try
-            {
-                var config = JsonSerializer.Deserialize(File.ReadAllText(manifest), ManifestContext.Default.InstallManifest);
-                if (config?.Project is not null)
-                {
-                    string full = Path.GetFullPath(Path.Combine(repoDir, config.Project));
-                    if (File.Exists(full))
-                        return full;
-                    Console.Error.WriteLine($"error: project from .dotnet-install.json not found: {config.Project}");
-                    return null;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"error: reading .dotnet-install.json: {ex.Message}");
-                return null;
-            }
+            string full = Path.GetFullPath(Path.Combine(repoDir, repoManifest.Project));
+            if (File.Exists(full))
+                return full;
+            Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {repoManifest.Project}");
+            return null;
         }
 
         // 3. Auto-detect: find project files with OutputType=Exe (excluding test projects)
@@ -385,14 +371,3 @@ static class GitSource
         return p.ExitCode == 0 ? output : null;
     }
 }
-
-// ---- JSON source generation for AOT ----
-
-class InstallManifest
-{
-    [JsonPropertyName("project")]
-    public string? Project { get; set; }
-}
-
-[JsonSerializable(typeof(InstallManifest))]
-partial class ManifestContext : JsonSerializerContext { }

@@ -79,7 +79,7 @@ static class InstallAction
         }
 
         // No source specified — try current directory
-        if (ToolConfig.Read(".")?.Bundle is { Count: > 0 })
+        if (ToolConfig.ReadFromRepo(".")?.Bundle is { Count: > 0 })
         {
             if (!CheckPrereqs(dotnet: true))
                 return 1;
@@ -155,16 +155,16 @@ static class InstallAction
     }
 
     /// <summary>
-    /// If <paramref name="path"/> is a directory whose .dotnet-install.json advertises
-    /// a bundle, builds and installs every listed project. Returns the exit code, or
-    /// null if there is no directory bundle to act on.
+    /// If <paramref name="path"/> is a directory whose <c>.dotnet-install/.dotnet-install.json</c>
+    /// advertises a bundle, builds and installs every listed project. Returns the exit
+    /// code, or null if there is no advertised bundle to act on.
     /// </summary>
     static int? TryInstallLocalBundle(string path, string installDir, bool requireSourceLink)
     {
         if (!Directory.Exists(path))
             return null;
 
-        var config = ToolConfig.Read(path);
+        var config = ToolConfig.ReadFromRepo(path);
         if (config?.Bundle is not { Count: > 0 } bundle)
             return null;
 

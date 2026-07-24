@@ -18,14 +18,23 @@ public class BundleConfigTests : IDisposable
         try { Directory.Delete(_tempDir, true); } catch { }
     }
 
-    void WriteConfig(string json) =>
-        File.WriteAllText(Path.Combine(_tempDir, ".dotnet-install.json"), json);
+    void WriteRepoManifest(string json)
+    {
+        string dir = Path.Combine(_tempDir, ToolConfig.RepoDirName);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, ToolConfig.FileName), json);
+    }
+
+    void WriteColocated(string json) =>
+        File.WriteAllText(Path.Combine(_tempDir, ToolConfig.FileName), json);
 
     [Fact]
-    public void Read_ParsesBundleEntries()
+    public void ReadFromRepo_ParsesBundleEntries()
     {
-        WriteConfig("""
+        WriteRepoManifest("""
         {
+          "version": 3,
+          "name": "my-toolset",
           "bundle": [
             { "project": "src/tool-a/tool-a.csproj" },
             { "project": "src/tool-b/tool-b.csproj" }
@@ -33,9 +42,11 @@ public class BundleConfigTests : IDisposable
         }
         """);
 
-        var config = ToolConfig.Read(_tempDir);
+        var config = ToolConfig.ReadFromRepo(_tempDir);
 
         Assert.NotNull(config);
+        Assert.Equal(3, config.Version);
+        Assert.Equal("my-toolset", config.Name);
         Assert.NotNull(config.Bundle);
         Assert.Equal(2, config.Bundle.Count);
         Assert.Equal("src/tool-a/tool-a.csproj", config.Bundle[0].Project);
@@ -43,31 +54,48 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
-    public void Read_BundleIsNull_WhenAbsent()
+    public void ReadFromRepo_IgnoresBareRootFile()
     {
-        WriteConfig("""
-        {
-          "exe": "solo-tool"
-        }
+        // A .dotnet-install.json at the repo root must NOT be treated as the repo
+        // manifest; only .dotnet-install/.dotnet-install.json is honored.
+        WriteColocated("""
+        { "bundle": [ { "project": "root.csproj" } ] }
+        """);
+
+        Assert.Null(ToolConfig.ReadFromRepo(_tempDir));
+    }
+
+    [Fact]
+    public void Read_ParsesColocatedFile()
+    {
+        WriteColocated("""
+        { "exe": "solo-tool", "update": { "type": "nuget", "package": "solo-tool" } }
         """);
 
         var config = ToolConfig.Read(_tempDir);
 
         Assert.NotNull(config);
-        Assert.Null(config.Bundle);
+        Assert.Equal("solo-tool", config.Exe);
+        Assert.Equal("nuget", config.Update?.Type);
     }
 
     [Fact]
-    public void Read_CoexistsWithUpdateChannel()
+    public void ReadFromRepo_ReturnsNull_WhenAbsent()
     {
-        WriteConfig("""
+        Assert.Null(ToolConfig.ReadFromRepo(_tempDir));
+    }
+
+    [Fact]
+    public void ReadFromRepo_CoexistsWithUpdateChannel()
+    {
+        WriteRepoManifest("""
         {
           "update": { "type": "nuget", "package": "solo-tool" },
           "bundle": [ { "project": "app.csproj" } ]
         }
         """);
 
-        var config = ToolConfig.Read(_tempDir);
+        var config = ToolConfig.ReadFromRepo(_tempDir);
 
         Assert.NotNull(config);
         Assert.Equal("nuget", config.Update?.Type);
