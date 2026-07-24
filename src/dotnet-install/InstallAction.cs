@@ -59,6 +59,13 @@ static class InstallAction
             if (!CheckPrereqs(dotnet: true))
                 return 1;
 
+            // A repo checked out locally can advertise a toolset ("bundle").
+            if (TryInstallLocalBundle(localPath, installDir, requireSourceLink) is int bundleResult)
+            {
+                if (bundleResult == 0) ShellHint.PrintIfNeeded(installDir);
+                return bundleResult;
+            }
+
             string? projectFile = FindProjectFile(localPath);
             if (projectFile is null)
             {
@@ -72,6 +79,15 @@ static class InstallAction
         }
 
         // No source specified — try current directory
+        if (ToolConfig.Read(".")?.Bundle is { Count: > 0 })
+        {
+            if (!CheckPrereqs(dotnet: true))
+                return 1;
+            int r = TryInstallLocalBundle(".", installDir, requireSourceLink) ?? 1;
+            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            return r;
+        }
+
         string? cwdProject = FindProjectFile(".");
         if (cwdProject is not null)
         {
@@ -138,39 +154,66 @@ static class InstallAction
         }
     }
 
+    /// <summary>
+    /// If <paramref name="path"/> is a directory whose .dotnet-install.json advertises
+    /// a bundle, builds and installs every listed project. Returns the exit code, or
+    /// null if there is no directory bundle to act on.
+    /// </summary>
+    static int? TryInstallLocalBundle(string path, string installDir, bool requireSourceLink)
+    {
+        if (!Directory.Exists(path))
+            return null;
+
+        var config = ToolConfig.Read(path);
+        if (config?.Bundle is not { Count: > 0 } bundle)
+            return null;
+
+        string fullDir = Path.GetFullPath(path);
+        var source = new InstallSource
+        {
+            Type = "local",
+            Commit = GitCommit(fullDir)
+        };
+
+        return BundleInstaller.Install(fullDir, bundle, installDir, source, requireSourceLink);
+    }
+
     static InstallSource CreateLocalSource(string projectFile)
     {
         string fullPath = Path.GetFullPath(projectFile);
         string? projectDir = Path.GetDirectoryName(fullPath);
-        string? commit = null;
-
-        if (projectDir is not null)
-        {
-            try
-            {
-                var psi = new System.Diagnostics.ProcessStartInfo("git")
-                {
-                    WorkingDirectory = projectDir,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                };
-                psi.ArgumentList.Add("rev-parse");
-                psi.ArgumentList.Add("HEAD");
-
-                using var p = System.Diagnostics.Process.Start(psi);
-                commit = p?.StandardOutput.ReadToEnd().Trim();
-                p?.WaitForExit();
-                if (p?.ExitCode != 0) commit = null;
-            }
-            catch { }
-        }
 
         return new InstallSource
         {
             Type = "local",
             Project = fullPath,
-            Commit = commit
+            Commit = projectDir is not null ? GitCommit(projectDir) : null
         };
+    }
+
+    /// <summary>Returns the HEAD commit SHA for a directory, or null if not a git repo.</summary>
+    static string? GitCommit(string dir)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git")
+            {
+                WorkingDirectory = dir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            psi.ArgumentList.Add("rev-parse");
+            psi.ArgumentList.Add("HEAD");
+
+            using var p = System.Diagnostics.Process.Start(psi);
+            string? commit = p?.StandardOutput.ReadToEnd().Trim();
+            p?.WaitForExit();
+            return p?.ExitCode == 0 ? commit : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     static string? FindProjectFile(string path)
