@@ -105,17 +105,48 @@ class InstallSource
 }
 
 /// <summary>
-/// Repo-level config file (.dotnet-install.json) that tool authors place
-/// in their repository root. Declares the tool's exe name and update plan.
+/// The <c>.dotnet-install.json</c> config schema. It appears in two places,
+/// with the same filename and schema:
+///
+/// <list type="bullet">
+///   <item><b>Colocated</b> — sitting in a directory the tool is pointed at
+///   directly (a project directory / local path). Describes that one tool
+///   (<c>exe</c>, <c>update</c>).</item>
+///   <item><b>Repo</b> — at <c>&lt;repo&gt;/.dotnet-install/.dotnet-install.json</c>,
+///   read when installing via the repo gesture (<c>--github</c>/<c>--git</c>).
+///   Advertises the repo's toolset (<c>bundle</c>). The repo root itself is
+///   never scanned — only the <c>.dotnet-install/</c> directory.</item>
+/// </list>
+///
+/// The shape mirrors the DotNetCliTool v3 manifest, so a repo can advertise the
+/// same toolset it publishes as a v3 bundle package.
 /// </summary>
 class ToolConfig
 {
-    const string FileName = ".dotnet-install.json";
+    internal const string FileName = ".dotnet-install.json";
+
+    /// <summary>Well-known repo directory holding the advertise manifest.</summary>
+    internal const string RepoDirName = ".dotnet-install";
+
+    /// <summary>DotNetCliTool manifest version (3 for the v3 spec). Optional.</summary>
+    [JsonPropertyName("version")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int Version { get; set; }
+
+    /// <summary>Display name for the advertised toolset. Optional.</summary>
+    [JsonPropertyName("name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; set; }
 
     /// <summary>The executable/command name this tool produces.</summary>
     [JsonPropertyName("exe")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Exe { get; set; }
+
+    /// <summary>Repo-relative project to install (single-tool repos).</summary>
+    [JsonPropertyName("project")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Project { get; set; }
 
     /// <summary>Preferred update channel (e.g., NuGet package).</summary>
     [JsonPropertyName("update")]
@@ -123,19 +154,28 @@ class ToolConfig
     public InstallSource? Update { get; set; }
 
     /// <summary>
-    /// Optional toolset advertised by the repo. When present and installing from
-    /// the repo root, every listed project is built and installed together.
+    /// Toolset the repo advertises. When present and installing from the repo
+    /// root, every listed project is built and installed together.
     /// </summary>
     [JsonPropertyName("bundle")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<BundleEntry>? Bundle { get; set; }
 
     /// <summary>
-    /// Read config from a directory (typically repo root). Returns null if not found.
+    /// Reads a colocated <c>.dotnet-install.json</c> from a directory. Returns null if absent.
     /// </summary>
-    internal static ToolConfig? Read(string directory)
+    internal static ToolConfig? Read(string directory) =>
+        ReadFile(Path.Combine(directory, FileName));
+
+    /// <summary>
+    /// Reads a repo's advertise manifest from <c>&lt;repoRoot&gt;/.dotnet-install/.dotnet-install.json</c>.
+    /// The repo root itself is never scanned. Returns null if absent.
+    /// </summary>
+    internal static ToolConfig? ReadFromRepo(string repoRoot) =>
+        ReadFile(Path.Combine(repoRoot, RepoDirName, FileName));
+
+    static ToolConfig? ReadFile(string path)
     {
-        string path = Path.Combine(directory, FileName);
         if (!File.Exists(path)) return null;
 
         try

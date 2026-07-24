@@ -86,6 +86,14 @@ dotnet-install --package dotnet-inspect@0.16.0
 dotnet-install --github richlander/dotnet-runtimeinfo
 ```
 
+NuGet packages using the [DotNetCliTool v3][v3] layout are supported: a
+pointer package resolves to the right RID-specific payload for your platform,
+and a bundle package installs its members together. As always, only native
+single-file payloads are installed — a package that resolves to a managed
+`any` fallback points you at `dotnet tool install`.
+
+[v3]: https://github.com/dotnet/designs/blob/main/accepted/2026/dotnet-cli-tools-v3.md
+
 ### List installed tools
 
 ```bash
@@ -181,11 +189,15 @@ Managed or multi-file tools aren't supported here — install those with
 ### Advertising a toolset (bundle)
 
 A repo can advertise a set of tools to install together by adding a
-`bundle` array to `.dotnet-install.json` in the repo root. Each entry
+`bundle` array to its manifest. The repo-level manifest lives in a
+well-known directory — `.dotnet-install/.dotnet-install.json` — not bare
+at the repo root (mirroring `.claude-plugin/` for skills). Each entry
 points at a repo-relative project (or file-based app):
 
 ```json
 {
+  "version": 3,
+  "name": "my-toolset",
   "bundle": [
     { "project": "src/tool-a/tool-a.csproj" },
     { "project": "src/tool-b/tool-b.csproj" }
@@ -197,7 +209,8 @@ When you install from the repo root — `dotnet-install --github owner/repo`,
 `--git <url>`, or a local checkout — every listed project is built and
 installed. Installation stops at the first failure, leaving already-installed
 tools in place. An explicit `--project` overrides the bundle and installs a
-single tool.
+single tool. The shape mirrors the DotNetCliTool v3 manifest, so the same
+toolset can be published as a v3 bundle package.
 
 ## Commands and options
 
