@@ -94,10 +94,23 @@ filename and schema:
 - **Colocated** — in a directory you point the tool at directly (a project
   directory / local path). Describes that one tool (`exe`, `update`).
 - **Repo** — at `.dotnet-install/.dotnet-install.json`, read when installing via
-  the repo gesture (`--github`/`--git`). The repo root itself is never scanned —
-  only the `.dotnet-install/` directory. This mirrors `.claude-plugin/` for
-  skills, where the advertise manifest lives in a well-known directory rather
+  the repo gesture: `--github`, `--git`, or a local checkout
+  (`dotnet-install .` / `dotnet-install <dir>`). The repo root itself is never
+  scanned — only the `.dotnet-install/` directory. This mirrors `.claude-plugin/`
+  for skills, where the advertise manifest lives in a well-known directory rather
   than bare at the root.
+
+A repo can advertise either a single tool or a set of tools. A single-tool repo
+names the project to build (and, optionally, its `update` channel) — useful when
+the project isn't at the repo root or auto-detection would be ambiguous:
+
+```json
+{
+  "exe": "my-tool",
+  "project": "src/my-tool/my-tool.csproj",
+  "update": { "type": "nuget", "package": "my-tool" }
+}
+```
 
 A repo advertises a set of tools by listing repo-relative projects in a
 `bundle` array in `.dotnet-install/.dotnet-install.json`:
@@ -116,10 +129,10 @@ A repo advertises a set of tools by listing repo-relative projects in a
 This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted
 to build-from-source: the entries reference projects in the repo (the "local"
 flavor) rather than NuGet package ids. Installing from the repo root
-(`--github`, `--git`, or a local checkout) builds and installs every entry,
-recording per-tool provenance so each updates independently. Installation stops
-at the first failure and leaves already-installed tools in place. An explicit
-`--project` overrides the bundle.
+(`--github`, `--git`, or a local checkout — `dotnet-install .`) builds and
+installs every entry, recording per-tool provenance so each updates
+independently. Installation stops at the first failure and leaves
+already-installed tools in place. An explicit `--project` overrides the bundle.
 
 ## DotNetCliTool v3 packages
 

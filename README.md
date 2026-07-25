@@ -186,12 +186,26 @@ executable. Enable Native AOT or self-contained single-file publishing:
 Managed or multi-file tools aren't supported here — install those with
 `dotnet tool install`.
 
-### Advertising a toolset (bundle)
+### Advertising a tool or toolset
 
-A repo can advertise a set of tools to install together by adding a
-`bundle` array to its manifest. The repo-level manifest lives in a
-well-known directory — `.dotnet-install/.dotnet-install.json` — not bare
-at the repo root (mirroring `.claude-plugin/` for skills). Each entry
+A repo can advertise what to install by adding a manifest in a well-known
+directory — `.dotnet-install/.dotnet-install.json` — not bare at the repo root
+(mirroring `.claude-plugin/` for skills). It's read whenever you install from
+the repo root: `dotnet-install --github owner/repo`, `--git <url>`, or a local
+checkout (`dotnet-install .`).
+
+A single-tool repo names the project to build (handy when it isn't at the repo
+root, so `dotnet-install .` just works):
+
+```json
+{
+  "exe": "my-tool",
+  "project": "src/my-tool/my-tool.csproj",
+  "update": { "type": "nuget", "package": "my-tool" }
+}
+```
+
+A repo can also advertise a set of tools with a `bundle` array. Each entry
 points at a repo-relative project (or file-based app):
 
 ```json
@@ -205,12 +219,11 @@ points at a repo-relative project (or file-based app):
 }
 ```
 
-When you install from the repo root — `dotnet-install --github owner/repo`,
-`--git <url>`, or a local checkout — every listed project is built and
-installed. Installation stops at the first failure, leaving already-installed
-tools in place. An explicit `--project` overrides the bundle and installs a
-single tool. The shape mirrors the DotNetCliTool v3 manifest, so the same
-toolset can be published as a v3 bundle package.
+Installing from the repo root builds and installs every listed project.
+Installation stops at the first failure, leaving already-installed tools in
+place. An explicit `--project` overrides the bundle and installs a single tool.
+The shape mirrors the DotNetCliTool v3 manifest, so the same toolset can be
+published as a v3 bundle package.
 
 ## Commands and options
 
