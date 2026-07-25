@@ -86,6 +86,29 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
+    public void ReadFromRepo_ParsesSingleToolProject()
+    {
+        // The shape `dotnet-install .` consumes for a single-tool repo whose
+        // project lives in a subdirectory (e.g. dotnet-inspect).
+        WriteRepoManifest("""
+        {
+          "exe": "mytool",
+          "project": "src/mytool/mytool.csproj",
+          "update": { "type": "nuget", "package": "mytool" }
+        }
+        """);
+
+        var config = ToolConfig.ReadFromRepo(_tempDir);
+
+        Assert.NotNull(config);
+        Assert.Equal("mytool", config.Exe);
+        Assert.Equal("src/mytool/mytool.csproj", config.Project);
+        Assert.Null(config.Bundle);
+        Assert.Equal("nuget", config.Update?.Type);
+        Assert.Equal("mytool", config.Update?.Package);
+    }
+
+    [Fact]
     public void ReadFromRepo_CoexistsWithUpdateChannel()
     {
         WriteRepoManifest("""
