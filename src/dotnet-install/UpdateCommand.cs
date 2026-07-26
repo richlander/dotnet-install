@@ -158,7 +158,7 @@ static class UpdateCommand
         {
             Console.WriteLine("not cached, reinstalling");
             string spec = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-            return GitSource.InstallFromGit(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true);
+            return GitSource.InstallFromGit(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false);
         }
 
         // Fetch latest
@@ -195,7 +195,7 @@ static class UpdateCommand
         Console.WriteLine($"{shortCommit} -> {shortLatest}");
 
         string spec2 = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-        return GitSource.InstallFromGit(spec2, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true);
+        return GitSource.InstallFromGit(spec2, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false);
     }
 
     // ---- Local update ----

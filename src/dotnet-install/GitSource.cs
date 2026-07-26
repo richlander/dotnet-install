@@ -7,7 +7,7 @@ static class GitSource
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".nuget", "git-tools");
 
-    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
+    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true)
     {
         string? gitRef = rev ?? tag ?? branch;
         bool pinned = rev is not null || tag is not null;
@@ -97,7 +97,7 @@ static class GitSource
             return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
         }
 
-        if (!RequireAdvertised(config, projectOverride))
+        if (requireAdvertised && !RequireAdvertised(config, projectOverride))
             return 1;
 
         string? projectFile = DiscoverProject(repoDir, projectOverride);
@@ -117,7 +117,7 @@ static class GitSource
         return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
     }
 
-    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
+    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true)
     {
         // Parse owner/repo[@ref]
         int atIndex = spec.IndexOf('@');
@@ -236,7 +236,7 @@ static class GitSource
         }
 
         // Discover project
-        if (!RequireAdvertised(config, projectOverride))
+        if (requireAdvertised && !RequireAdvertised(config, projectOverride))
             return 1;
 
         string? projectFile = DiscoverProject(repoDir, projectOverride);
