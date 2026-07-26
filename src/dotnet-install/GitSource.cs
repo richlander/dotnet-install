@@ -7,18 +7,32 @@ static class GitSource
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".nuget", "git-tools");
 
+    // Cache directory (the working clone) for a tool installed from a raw git
+    // URL (provenance Type "git"). Keyed by a hash of the URL so update lands in
+    // the exact same clone the install created. Must match InstallFromUrl.
+    internal static string RepoCacheDirForUrl(string url)
+    {
+        string cacheKey = url.Replace("://", "/").Replace(":", "/").TrimEnd('/').TrimEnd(".git".ToCharArray());
+        string repoCache = Path.Combine(CacheBase, "_git", Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(cacheKey)))[..16].ToLowerInvariant());
+        return Path.Combine(repoCache, "repo");
+    }
+
+    // Cache directory for a tool installed from an owner/repo GitHub spec
+    // (provenance Type "github"). Must match InstallFromGit.
+    internal static string RepoCacheDirForGitHub(string owner, string repo) =>
+        Path.Combine(CacheBase, owner, repo, "repo");
+
+
     public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true)
     {
         string? gitRef = rev ?? tag ?? branch;
         bool pinned = rev is not null || tag is not null;
 
         // Derive a cache key from the URL
-        string cacheKey = url.Replace("://", "/").Replace(":", "/").TrimEnd('/').TrimEnd(".git".ToCharArray());
-        string repoCache = Path.Combine(CacheBase, "_git", Convert.ToHexString(
-            System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes(cacheKey)))[..16].ToLowerInvariant());
-        string repoDir = Path.Combine(repoCache, "repo");
-        Directory.CreateDirectory(repoCache);
+        string repoDir = RepoCacheDirForUrl(url);
+        Directory.CreateDirectory(Path.GetDirectoryName(repoDir)!);
 
         // Clone or fetch
         bool isExistingClone = Directory.Exists(Path.Combine(repoDir, ".git"));
@@ -146,9 +160,8 @@ static class GitSource
         }
 
         // Resolve cache paths
-        string repoCache = Path.Combine(CacheBase, owner, repo);
-        string repoDir = Path.Combine(repoCache, "repo");
-        Directory.CreateDirectory(repoCache);
+        string repoDir = RepoCacheDirForGitHub(owner, repo);
+        Directory.CreateDirectory(Path.GetDirectoryName(repoDir)!);
 
         string cloneUrl = useSsh
             ? $"git@github.com:{owner}/{repo}.git"
