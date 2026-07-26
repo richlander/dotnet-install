@@ -169,6 +169,34 @@ for updates:
     .tool.json        # install source (for `update`)
 ```
 
+### Repo-local tools
+
+For a tool you want to build and test inside a single repo or worktree —
+without touching the global `~/.dotnet/bin` — install into a repo-local
+`.dotnet/bin/` directory:
+
+```bash
+dotnet-install . -o .dotnet/bin
+```
+
+`doctor` is worktree-aware: run it from anywhere inside the repo and, if a
+`<git-root>/.dotnet/bin` directory exists, it reports whether that directory
+is git-ignored and whether it is active on `PATH` for the current shell:
+
+```text
+Repo-local tools: .dotnet/bin
+⚠ .dotnet/ is not git-ignored
+  Run with --fix to add it to .gitignore
+⚠ not on PATH for this shell
+  Activate for this shell (transient — not added to your shell profile):
+    . .dotnet/bin/env
+```
+
+`doctor --fix` adds `.dotnet/` to `.gitignore`. Activation is intentionally
+**transient**: sourcing the generated `env` file adds the directory to `PATH`
+for the current shell only — a repo-specific path is never written to your
+global shell profile.
+
 ## Project configuration
 
 No new properties required, but the project must produce a single-file
