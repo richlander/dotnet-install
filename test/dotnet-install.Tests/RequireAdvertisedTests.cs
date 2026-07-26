@@ -1,8 +1,9 @@
 namespace dotnet_install.Tests;
 
 // The inside/outside gesture model requires --repo/--github repos to advertise
-// their tools via .dotnet-install/.dotnet-install.json (a bundle or a single
-// project), unless an explicit --project override names the project.
+// their tools via .dotnet-install/.dotnet-install.json (the "tools" array, or the
+// legacy exe/project/bundle fields), unless an explicit --project override names
+// the project.
 public class RequireAdvertisedTests
 {
     [Fact]
@@ -13,7 +14,17 @@ public class RequireAdvertisedTests
     }
 
     [Fact]
-    public void ManifestProject_Satisfies()
+    public void ManifestTools_Satisfies()
+    {
+        var config = new ToolConfig
+        {
+            Tools = [new Tool { Name = "tool", Project = "src/tool/tool.csproj" }]
+        };
+        Assert.True(GitSource.RequireAdvertised(config, projectOverride: null));
+    }
+
+    [Fact]
+    public void LegacyManifestProject_Satisfies()
     {
         var config = new ToolConfig { Project = "src/tool/tool.csproj" };
         Assert.True(GitSource.RequireAdvertised(config, projectOverride: null));
@@ -26,11 +37,11 @@ public class RequireAdvertisedTests
     }
 
     [Fact]
-    public void ManifestWithoutProject_Fails()
+    public void ManifestWithoutTools_Fails()
     {
-        // A bundle is handled by the caller before RequireAdvertised runs, so a
-        // config with neither a project nor an override is "not advertised" here.
-        var config = new ToolConfig { Name = "demo" };
+        // A manifest that names a command (exe) but advertises no buildable tool
+        // is "not advertised" here.
+        var config = new ToolConfig { Name = "demo", Exe = "demo" };
         Assert.False(GitSource.RequireAdvertised(config, projectOverride: null));
     }
 }

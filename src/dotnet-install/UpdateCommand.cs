@@ -166,9 +166,9 @@ static class UpdateCommand
         int Reinstall()
         {
             if (isUrl)
-                return GitSource.InstallFromUrl(repository, installDir, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false);
+                return GitSource.InstallFromUrl(repository, installDir, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
             string spec = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-            return GitSource.InstallFromGit(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false);
+            return GitSource.InstallFromGit(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
         }
 
         if (!Directory.Exists(Path.Combine(repoDir, ".git")))
@@ -269,7 +269,7 @@ static class UpdateCommand
             Commit = currentCommit
         };
 
-        return Installer.Install(projectPath, installDir, newSource, quiet: true);
+        return Installer.Install(projectPath, installDir, newSource, quiet: true, commandName: tool.Name);
     }
 
     // ---- GitHub Release update ----

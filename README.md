@@ -247,36 +247,45 @@ directory — `.dotnet-install/.dotnet-install.json` — not bare at the repo ro
 the repo: `dotnet-install --github owner/repo`, `--repo <url|path>`, or a local
 checkout (`dotnet-install .`).
 
-A single-tool repo names the project to build (handy when it isn't at the repo
-root, so `dotnet-install .` just works):
+A repo advertises its toolset with a `tools` array. Each entry names a `name`
+(the command placed on `PATH`) and a repo-relative `project` to build — modeled
+on Cargo's `[[bin]]` target. A single entry is a one-tool repo (handy when the
+project isn't at the repo root, so `dotnet-install .` just works):
 
 ```json
 {
-  "exe": "my-tool",
-  "project": "src/my-tool/my-tool.csproj",
+  "version": 3,
+  "name": "my-tool",
+  "tools": [
+    { "name": "my-tool", "project": "src/my-tool/my-tool.csproj" }
+  ],
   "update": { "type": "nuget", "package": "my-tool" }
 }
 ```
 
-A repo can also advertise a set of tools with a `bundle` array. Each entry
-points at a repo-relative project (or file-based app):
+Both fields are optional: a single-tool manifest that omits `project`
+auto-detects the repo's sole executable, and `name` is derived from the
+assembly name when omitted. List several entries to advertise a set of tools —
+each must name its own `project`:
 
 ```json
 {
   "version": 3,
   "name": "my-toolset",
-  "bundle": [
-    { "project": "src/tool-a/tool-a.csproj" },
-    { "project": "src/tool-b/tool-b.csproj" }
+  "tools": [
+    { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
+    { "name": "tool-b", "project": "src/tool-b/tool-b.csproj" }
   ]
 }
 ```
 
-Installing from the repo root builds and installs every listed project.
+Installing from the repo root builds and installs every listed tool.
 Installation stops at the first failure, leaving already-installed tools in
-place. An explicit `--project` overrides the bundle and installs a single tool.
-The shape mirrors the DotNetCliTool v3 manifest, so the same toolset can be
-published as a v3 bundle package.
+place. An explicit `--project` overrides the toolset and installs a single tool.
+The `update` channel is honored only for global installs; `dotnet-install .`
+into `./.dotnet/bin` always rebuilds from the checkout. The legacy `exe`,
+`project`, and `bundle` fields still work. The shape mirrors the DotNetCliTool
+v3 manifest, so the same toolset can be published as a v3 bundle package.
 
 ## Commands and options
 

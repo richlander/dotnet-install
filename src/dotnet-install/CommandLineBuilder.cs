@@ -8,6 +8,42 @@ using System.CommandLine.Parsing;
 /// </summary>
 static class CommandLineBuilder
 {
+    /// <summary>
+    /// The root command name. System.CommandLine strips a leading token whose file
+    /// name matches this (treating it as the invocation path), which would swallow a
+    /// legitimate positional path ending in it.
+    /// </summary>
+    internal const string CommandName = "dotnet-install";
+
+    /// <summary>
+    /// Guards the first argument against System.CommandLine's invocation-path
+    /// stripping: when it is a positional path whose file name matches
+    /// <see cref="CommandName"/> (e.g. <c>./dotnet-install</c> or a clone directory
+    /// of this repo), it would otherwise be silently dropped as the invocation path.
+    /// The stripping only affects the very first token, so when there are other
+    /// arguments the offending path is moved to the end (past any options, which
+    /// bind by name regardless of position); when it is the only argument, it is
+    /// separated with <c>--</c>. Returns the args unchanged otherwise.
+    /// </summary>
+    internal static string[] NormalizeArgs(string[] args)
+    {
+        if (args.Length > 0 && !args[0].StartsWith('-') &&
+            string.Equals(Path.GetFileNameWithoutExtension(args[0].TrimEnd('/', '\\')),
+                CommandName, StringComparison.OrdinalIgnoreCase))
+        {
+            // Sole token: separate it so it is parsed as the project operand rather
+            // than the invocation path.
+            if (args.Length == 1)
+                return ["--", args[0]];
+
+            // Otherwise move it past the remaining arguments so trailing options
+            // still bind, while it is no longer the (stripped) first token.
+            return [.. args[1..], args[0]];
+        }
+
+        return args;
+    }
+
     public static RootCommand CreateRootCommand()
     {
         var rootCommand = new RootCommand("Install .NET executables to PATH — like cargo install and go install");

@@ -79,22 +79,21 @@ storing things under `~/.nuget/`.
 For GitHub repos with multiple projects, resolution order:
 
 1. `--project` flag (explicit path)
-2. `.dotnet-install/.dotnet-install.json` `bundle` — a toolset the repo
-   advertises; every listed project is built and installed together (see below)
-3. `.dotnet-install/.dotnet-install.json` `project` field
-4. Auto-detect `Exe` projects in the repo
-5. File-based apps (`.cs` with `#:property` directives)
+2. `.dotnet-install/.dotnet-install.json` `tools` array — the toolset the repo
+   advertises; every listed tool is built and installed together (see below)
+3. Auto-detect `Exe` projects in the repo
+4. File-based apps (`.cs` with `#:property` directives)
 
 If multiple candidates remain (≤12), an interactive
 arrow-key selector is presented.
 
-## Bundles (repo toolsets)
+## Advertised toolsets
 
 The `.dotnet-install.json` manifest appears in two places, with the same
 filename and schema:
 
 - **Colocated** — in a directory you point the tool at directly (a project
-  directory / local path). Describes that one tool (`exe`, `update`).
+  directory / local path).
 - **Repo** — at `.dotnet-install/.dotnet-install.json`, read when installing via
   the repo gesture: `--github`, `--repo <url|path>`, or a local checkout
   (`dotnet-install .`). The repo root itself is never
@@ -107,32 +106,39 @@ Direction determines the install target. An **outside** request — `--repo`,
 **globally** (`~/.dotnet/bin`). An **inside** request — a bare `.` when the
 directory advertises tools — installs **locally** (`./.dotnet/bin`), so a repo's
 own dev tooling never pollutes the global set. `--repo`/`--github` require the
-repo to advertise (bundle or `project`) unless `--project` names one explicitly;
+repo to advertise a `tools` array unless `--project` names one explicitly;
 `.` with no manifest degrades to an outside request (interactive global install,
 or an error when piped).
 
-A repo can advertise either a single tool or a set of tools. A single-tool repo
-names the project to build (and, optionally, its `update` channel) — useful when
-the project isn't at the repo root or auto-detection would be ambiguous:
+A repo advertises its toolset with a `tools` array. Each entry names a `name`
+(the command placed on `PATH`) and a repo-relative `project` to build. This is
+modeled on Cargo's `[[bin]]` target (`name` + `path`). A single entry is a
+one-tool repo:
 
 ```json
 {
-  "exe": "my-tool",
-  "project": "src/my-tool/my-tool.csproj",
+  "version": 3,
+  "name": "my-tool",
+  "tools": [
+    { "name": "my-tool", "project": "src/my-tool/my-tool.csproj" }
+  ],
   "update": { "type": "nuget", "package": "my-tool" }
 }
 ```
 
-A repo advertises a set of tools by listing repo-relative projects in a
-`bundle` array in `.dotnet-install/.dotnet-install.json`:
+Both fields are optional. `project` is present only in source scenarios (it is
+absent once a tool is published as a prebuilt package), and when a single-tool
+manifest omits it the repo's sole executable project is auto-detected (Go-style).
+`name` is derived from the project's assembly name when omitted. A multi-tool
+manifest cannot auto-detect, so every entry must name a `project`:
 
 ```json
 {
   "version": 3,
   "name": "my-toolset",
-  "bundle": [
-    { "project": "src/tool-a/tool-a.csproj" },
-    { "project": "src/tool-b/tool-b.csproj" }
+  "tools": [
+    { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
+    { "name": "tool-b", "project": "src/tool-b/tool-b.csproj" }
   ]
 }
 ```
@@ -143,7 +149,15 @@ flavor) rather than NuGet package ids. Installing from the repo
 (`--github`, `--repo`, or a local checkout — `dotnet-install .`) builds and
 installs every entry, recording per-tool provenance so each updates
 independently. Installation stops at the first failure and leaves
-already-installed tools in place. An explicit `--project` overrides the bundle.
+already-installed tools in place. An explicit `--project` overrides the toolset.
+
+The `update` channel is honored only for **outside/global** installs. An
+**inside** install (`dotnet-install .` → `./.dotnet/bin`) always rebuilds from
+the checkout, so no update channel is recorded — you refresh by re-running
+against the repo.
+
+The legacy `exe`, `project`, and `bundle` fields remain readable and are
+normalized onto the `tools` array, so existing manifests keep working.
 
 ## DotNetCliTool v3 packages
 

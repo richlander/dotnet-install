@@ -133,8 +133,8 @@ dotnet install --github richlander/dotnet-runtimeinfo --ssh
 dotnet install --github richlander/dotnet-runtimeinfo --project dotnet-runtimeinfo.csproj
 ```
 
-`--repo`/`--github` require the repo to advertise a bundle or
-project in `.dotnet-install/.dotnet-install.json`, unless
+`--repo`/`--github` require the repo to advertise a `tools`
+array in `.dotnet-install/.dotnet-install.json`, unless
 `--project` names one explicitly. If the user types
 `owner/repo` without `--github`, the tool prompts for
 confirmation before cloning (anti-typosquatting).
@@ -178,7 +178,7 @@ dotnet install completion        # shell completion setup
   confirm remote sources (NuGet/GitHub); explicit flags
   (`--package`, `--github`, `--repo`) skip all prompts
 - **Advertised manifest**: `--repo`/`--github` require the
-  repo to advertise a bundle or project in
+  repo to advertise a `tools` array in
   `.dotnet-install/.dotnet-install.json` (or name one with
   `--project`)
 - **Single-file only**: only single-file native executables

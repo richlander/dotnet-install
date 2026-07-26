@@ -21,7 +21,7 @@ static class Installer
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
 
-    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false, InstallSource? update = null)
+    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false, InstallSource? update = null, string? commandName = null)
     {
         // 1. Evaluate the project to read properties before building
         var info = EvaluateProject(projectFile);
@@ -33,6 +33,10 @@ static class Installer
         }
 
         string appName = info.AssemblyName;
+        // The manifest may name the command explicitly (tools[].name); otherwise it
+        // is derived from the project's assembly name. The published file is always
+        // named after the assembly; only the installed name follows the override.
+        string installName = string.IsNullOrWhiteSpace(commandName) ? appName : commandName;
 
         // This tool installs only single-file executables. A project must opt into
         // Native AOT or self-contained single-file publishing; anything else is a
@@ -56,9 +60,9 @@ static class Installer
         // `dotnet tool install -g`). Check before the (expensive) publish so we fail fast.
         if (!quiet)
         {
-            var conflict = GlobalToolCheck.Find(appName, installDir);
+            var conflict = GlobalToolCheck.Find(installName, installDir);
             if (conflict is not null)
-                return GlobalToolCheck.Report(appName, conflict);
+                return GlobalToolCheck.Report(installName, conflict);
         }
 
         // Pre-flight: warn if the project's TFM may not be buildable
@@ -67,7 +71,7 @@ static class Installer
 
         if (!quiet)
         {
-            Console.WriteLine($"Installing {appName} to {installDir}");
+            Console.WriteLine($"Installing {installName} to {installDir}");
             Console.WriteLine($"Publishing ({mode}, Release)...");
         }
 
@@ -89,17 +93,18 @@ static class Installer
                 return 1;
             }
 
-            // 4. Locate executable in publish output
-            string execName = OperatingSystem.IsWindows() ? $"{appName}.exe" : appName;
-            string execPath = Path.Combine(tempDir, execName);
+            // 4. Locate executable in publish output (named after the assembly)
+            string builtName = OperatingSystem.IsWindows() ? $"{appName}.exe" : appName;
+            string execPath = Path.Combine(tempDir, builtName);
 
             if (!File.Exists(execPath))
             {
-                Console.Error.WriteLine($"error: '{execName}' not found in publish output");
+                Console.Error.WriteLine($"error: '{builtName}' not found in publish output");
                 return 1;
             }
 
-            // 5. Verify the publish produced a single file and place it
+            // 5. Verify the publish produced a single file and place it under the
+            // installed command name (which may differ from the assembly name).
             if (!IsSingleFile(tempDir))
             {
                 Console.Error.WriteLine($"error: publishing '{appName}' produced multiple files, not a single executable.");
@@ -108,20 +113,21 @@ static class Installer
                 return 1;
             }
 
+            string destName = OperatingSystem.IsWindows() ? $"{installName}.exe" : installName;
             Directory.CreateDirectory(installDir);
-            PlaceSingleFile(execPath, installDir, execName);
+            PlaceSingleFile(execPath, installDir, destName);
 
             // Write install metadata (for update tracking)
             if (source is not null)
             {
-                InstallLayout.RemoveLegacyLauncher(installDir, appName);
-                InstallLayout.ResetMetadataDirectory(installDir, appName);
-                string metaDir = InstallLayout.MetadataDirectory(installDir, appName);
+                InstallLayout.RemoveLegacyLauncher(installDir, installName);
+                InstallLayout.ResetMetadataDirectory(installDir, installName);
+                string metaDir = InstallLayout.MetadataDirectory(installDir, installName);
                 ToolMetadata.Write(metaDir, new ToolManifest { Source = source, Update = update });
             }
 
             if (!quiet)
-                Console.WriteLine($"Installed {appName} → {Path.Combine(installDir, execName)}");
+                Console.WriteLine($"Installed {installName} → {Path.Combine(installDir, destName)}");
 
             return 0;
         }

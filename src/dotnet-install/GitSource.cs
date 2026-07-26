@@ -25,7 +25,7 @@ static class GitSource
         Path.Combine(CacheBase, owner, repo, "repo");
 
 
-    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true)
+    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
     {
         string? gitRef = rev ?? tag ?? branch;
         bool pinned = rev is not null || tag is not null;
@@ -96,9 +96,10 @@ static class GitSource
 
         var config = ToolConfig.ReadFromRepo(repoDir);
 
-        // A repo can advertise a toolset ("bundle"). When present and no explicit
-        // project override is given, build and install every listed project.
-        if (projectOverride is null && config?.Bundle is { Count: > 0 } bundle)
+        // A repo advertises its toolset via the "tools" array. When present and no
+        // explicit project override is given, build and install every listed tool.
+        var tools = projectOverride is null ? (config?.GetTools() ?? []) : [];
+        if (tools.Count > 0)
         {
             var bundleSource = new InstallSource
             {
@@ -108,7 +109,7 @@ static class GitSource
                 Commit = commitSha,
                 Pinned = pinned
             };
-            return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
+            return BundleInstaller.Install(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
         }
 
         if (requireAdvertised && !RequireAdvertised(config, projectOverride))
@@ -128,10 +129,16 @@ static class GitSource
             Pinned = pinned
         };
 
-        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
+        // A repo-level update channel describes a single advertised tool; suppress
+        // it when the repo advertises a bundle (a member reached here via its
+        // recorded project override updates from its git source instead).
+        InstallSource? recordedUpdate = (config?.GetTools().Count ?? 0) > 1 ? null : config?.Update;
+        // Preserve the caller-supplied installed command name (e.g. an update
+        // reinstalling under the tool's existing name) so it stays stable.
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: recordedUpdate, commandName: commandName);
     }
 
-    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true)
+    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
     {
         // Parse owner/repo[@ref]
         int atIndex = spec.IndexOf('@');
@@ -229,12 +236,13 @@ static class GitSource
         // Capture commit SHA for provenance tracking
         string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
 
-        // Read repo config (.dotnet-install.json) for exe name and update plan
+        // Read repo config (.dotnet-install.json) for advertised tools and update plan
         var config = ToolConfig.ReadFromRepo(repoDir);
 
-        // A repo can advertise a toolset ("bundle"). When present and no explicit
-        // project override is given, build and install every listed project.
-        if (projectOverride is null && config?.Bundle is { Count: > 0 } bundle)
+        // A repo advertises its toolset via the "tools" array. When present and no
+        // explicit project override is given, build and install every listed tool.
+        var tools = projectOverride is null ? (config?.GetTools() ?? []) : [];
+        if (tools.Count > 0)
         {
             var bundleSource = new InstallSource
             {
@@ -245,7 +253,7 @@ static class GitSource
                 Ssh = useSsh,
                 Pinned = pinned
             };
-            return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
+            return BundleInstaller.Install(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
         }
 
         // Discover project
@@ -267,23 +275,33 @@ static class GitSource
             Pinned = pinned
         };
 
-        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
+        // A repo-level update channel describes a single advertised tool; suppress
+        // it when the repo advertises a bundle (a member reached here via its
+        // recorded project override updates from its git source instead).
+        InstallSource? recordedUpdate = (config?.GetTools().Count ?? 0) > 1 ? null : config?.Update;
+        // Preserve the caller-supplied installed command name (e.g. an update
+        // reinstalling under the tool's existing name) so it stays stable.
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: recordedUpdate, commandName: commandName);
     }
 
     // ---- Project discovery ----
 
     /// <summary>
     /// A repo installed with <c>--repo</c>/<c>--github</c> must advertise its tools via
-    /// <c>.dotnet-install/.dotnet-install.json</c> (a bundle, handled earlier, or a
-    /// single <c>project</c>). An explicit <c>--project</c> override bypasses this.
-    /// Returns false (after printing an error) when nothing is advertised.
+    /// <c>.dotnet-install/.dotnet-install.json</c> (the <c>tools</c> array). An explicit
+    /// <c>--project</c> override bypasses this. Returns false (after printing an error)
+    /// when nothing is advertised, distinguishing a missing manifest from one that
+    /// declares no tools.
     /// </summary>
     internal static bool RequireAdvertised(ToolConfig? config, string? projectOverride)
     {
-        if (projectOverride is not null || config?.Project is not null)
+        if (projectOverride is not null || (config?.GetTools().Count ?? 0) > 0)
             return true;
 
-        Console.Error.WriteLine($"error: this repo does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName}).");
+        if (config is null)
+            Console.Error.WriteLine($"error: this repo does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName} not found).");
+        else
+            Console.Error.WriteLine($"error: {ToolConfig.RepoDirName}/{ToolConfig.FileName} is present but advertises no tools.");
         Console.Error.WriteLine("Pass --project <path> to install a specific project from it.");
         return false;
     }
@@ -304,17 +322,28 @@ static class GitSource
 
         // 2. Repo manifest (.dotnet-install/.dotnet-install.json)
         var repoManifest = ToolConfig.ReadFromRepo(repoDir);
-        if (repoManifest?.Project is not null)
+        if (repoManifest?.GetTools() is { Count: 1 } single && single[0].Project is { } manifestProject)
         {
-            string full = Path.GetFullPath(Path.Combine(repoDir, repoManifest.Project));
+            string full = Path.GetFullPath(Path.Combine(repoDir, manifestProject));
             if (File.Exists(full))
                 return full;
-            Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {repoManifest.Project}");
+            Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {manifestProject}");
             return null;
         }
 
-        // 3. Auto-detect: find project files with OutputType=Exe (excluding test projects)
-        //    Also detect file-based apps (.cs files with #:property directives)
+        // 3. Auto-detect the repo's sole executable project.
+        return AutoDetectProject(repoDir);
+    }
+
+    /// <summary>
+    /// Finds the repo's single executable project (or file-based app), excluding test
+    /// and non-packable projects. Returns null (after printing an error) when none or
+    /// several ambiguous candidates are found; prompts interactively on a TTY.
+    /// </summary>
+    internal static string? AutoDetectProject(string repoDir)
+    {
+        // Find project files with OutputType=Exe (excluding test projects).
+        // Also detect file-based apps (.cs files with #:property directives).
         List<string> exeProjects = [];
 
         foreach (string csproj in Directory.EnumerateFiles(repoDir, "*.*proj", SearchOption.AllDirectories))

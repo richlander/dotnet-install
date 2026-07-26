@@ -117,14 +117,17 @@ static class InstallAction
         }
 
         var config = ToolConfig.ReadFromRepo(dir);
-        bool advertised = config is { Bundle.Count: > 0 } || config?.Project is not null;
+        var tools = config?.GetTools() ?? [];
+        bool advertised = tools.Count > 0;
 
         if (advertised)
         {
             string localDir = outputOverride ?? Path.Combine(Path.GetFullPath(dir), ".dotnet", "bin");
-            int r = TryInstallLocalBundle(dir, localDir, requireSourceLink)
-                ?? TryInstallLocalProject(dir, localDir, requireSourceLink)
-                ?? 1;
+            string fullDir = Path.GetFullPath(dir);
+            var source = new InstallSource { Type = "local", Commit = GitCommit(fullDir) };
+            // Inside/local install always rebuilds from the checkout, so no update
+            // channel is recorded — updates come from re-running against the repo.
+            int r = BundleInstaller.Install(fullDir, tools, localDir, source, requireSourceLink, update: null);
             if (r == 0) ShellHint.PrintRepoLocalActivation(localDir);
             return r;
         }
@@ -171,17 +174,21 @@ static class InstallAction
         }
 
         var config = ToolConfig.ReadFromRepo(dir);
-        bool advertised = config is { Bundle.Count: > 0 } || config?.Project is not null;
-        if (!advertised)
+        var tools = config?.GetTools() ?? [];
+        if (tools.Count == 0)
         {
-            Console.Error.WriteLine($"error: '{dir}' does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName} not found).");
+            if (config is null)
+                Console.Error.WriteLine($"error: '{dir}' does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName} not found).");
+            else
+                Console.Error.WriteLine($"error: {ToolConfig.RepoDirName}/{ToolConfig.FileName} is present but advertises no tools.");
             Console.Error.WriteLine("Pass --project <path> to install a specific project from it.");
             return 1;
         }
 
-        return TryInstallLocalBundle(dir, globalDir, requireSourceLink)
-            ?? TryInstallLocalProject(dir, globalDir, requireSourceLink)
-            ?? 1;
+        // Outside request → global install honors the repo's declared update channel.
+        string fullDir = Path.GetFullPath(dir);
+        var source = new InstallSource { Type = "local", Commit = GitCommit(fullDir) };
+        return BundleInstaller.Install(fullDir, tools, globalDir, source, requireSourceLink, update: config?.Update);
     }
 
     static bool CheckPrereqs(bool git = false, bool dotnet = false, string? context = null)
@@ -234,58 +241,33 @@ static class InstallAction
     }
 
     /// <summary>
-    /// If <paramref name="path"/> is a directory whose <c>.dotnet-install/.dotnet-install.json</c>
-    /// advertises a bundle, builds and installs every listed project. Returns the exit
-    /// code, or null if there is no advertised bundle to act on.
-    /// </summary>
-    static int? TryInstallLocalBundle(string path, string installDir, bool requireSourceLink)
-    {
-        if (!Directory.Exists(path))
-            return null;
-
-        var config = ToolConfig.ReadFromRepo(path);
-        if (config?.Bundle is not { Count: > 0 } bundle)
-            return null;
-
-        string fullDir = Path.GetFullPath(path);
-        var source = new InstallSource
-        {
-            Type = "local",
-            Commit = GitCommit(fullDir)
-        };
-
-        return BundleInstaller.Install(fullDir, bundle, installDir, source, requireSourceLink);
-    }
-
-    /// <summary>
-    /// Installs a single tool from a local directory or file path. When <paramref name="path"/>
-    /// is a directory whose <c>.dotnet-install/.dotnet-install.json</c> advertises a
-    /// <c>project</c>, that project (and its <c>update</c> channel) is used; otherwise the
-    /// path is scanned for a project file. Returns the exit code, or null if no project
-    /// could be resolved (so the caller can decide whether that is an error).
+    /// Installs a single tool from an explicit <c>--project</c> path (a directory or a
+    /// project/file-based-app file). When the path is a directory whose
+    /// <c>.dotnet-install/.dotnet-install.json</c> advertises exactly one tool with a
+    /// <c>project</c>, that project (its command <c>name</c> and <c>update</c> channel)
+    /// is honored; otherwise the path is scanned for a project file. Returns the exit
+    /// code, or null if no project could be resolved (so the caller can report it).
     /// </summary>
     static int? TryInstallLocalProject(string path, string installDir, bool requireSourceLink)
     {
         var repoConfig = Directory.Exists(path) ? ToolConfig.ReadFromRepo(path) : null;
 
-        string? projectFile;
-        if (repoConfig?.Project is not null)
+        if (repoConfig?.GetTools() is { Count: 1 } tools && tools[0].Project is { } toolProject)
         {
-            projectFile = Path.GetFullPath(Path.Combine(path, repoConfig.Project));
+            string projectFile = Path.GetFullPath(Path.Combine(path, toolProject));
             if (!File.Exists(projectFile))
             {
-                Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {repoConfig.Project}");
+                Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {toolProject}");
                 return 1;
             }
-        }
-        else
-        {
-            projectFile = FindProjectFile(path);
-            if (projectFile is null)
-                return null;
+            return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink, update: repoConfig.Update, commandName: tools[0].Name);
         }
 
-        return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink, update: repoConfig?.Update);
+        string? found = FindProjectFile(path);
+        if (found is null)
+            return null;
+
+        return Installer.Install(found, installDir, CreateLocalSource(found), requireSourceLink, update: repoConfig?.Update);
     }
 
     static InstallSource CreateLocalSource(string projectFile)
