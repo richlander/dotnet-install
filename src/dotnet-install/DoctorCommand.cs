@@ -247,14 +247,7 @@ static class DoctorCommand
             Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
-    static void WriteEnvFile(ShellConfig config)
-    {
-        string envPath = config.EnvFileAbsolute;
-        string? envDir = Path.GetDirectoryName(envPath);
-        if (envDir is not null)
-            Directory.CreateDirectory(envDir);
-        File.WriteAllText(envPath, config.EnvFileContent);
-    }
+    static void WriteEnvFile(ShellConfig config) => config.WriteEnvFile();
 
     static void WritePathToRcFile(ShellConfig config)
     {

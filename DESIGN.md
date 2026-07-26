@@ -43,18 +43,20 @@ install source for `update`.
 - **Unix**: `chmod +x` on the placed binary
 - **Windows**: `.exe` detection
 
-## Prompting model
+## Gesture model
 
-Two dimensions: *how the source is specified* and *local vs remote*.
+Two directions, which also determine the install target:
 
-| Source | Local | Remote |
-| ------ | ----- | ------ |
-| Explicit (`--package`, `--github`) | Just does it | Just does it |
-| Bare positional arg | Just does it | Prompts to confirm source |
+| Request | Example | Target |
+| ------- | ------- | ------ |
+| Outside (explicit source) | `--repo`, `--github`, `--project`, `--package` | Global (`~/.dotnet/bin`) |
+| Inside (bare `.`, advertised) | `dotnet-install .` | Local (`./.dotnet/bin`) |
 
-Bare args prompt for remote sources as an anti-typosquatting
-measure. Explicit flags signal intent and skip all prompts.
-Multiple bare args also skip prompts (batch mode).
+Explicit flags signal intent and install globally. A bare `.` honors a repo's
+advertised tooling and installs locally. With no manifest, `.` degrades to an
+outside request: interactive (a terminal) installs the scanned project globally;
+non-interactive (piped) errors and points at `--project .`. No arguments prints
+help.
 
 ## SDK preflight
 
@@ -94,11 +96,20 @@ filename and schema:
 - **Colocated** — in a directory you point the tool at directly (a project
   directory / local path). Describes that one tool (`exe`, `update`).
 - **Repo** — at `.dotnet-install/.dotnet-install.json`, read when installing via
-  the repo gesture: `--github`, `--git`, or a local checkout
-  (`dotnet-install .` / `dotnet-install <dir>`). The repo root itself is never
+  the repo gesture: `--github`, `--repo <url|path>`, or a local checkout
+  (`dotnet-install .`). The repo root itself is never
   scanned — only the `.dotnet-install/` directory. This mirrors `.claude-plugin/`
   for skills, where the advertise manifest lives in a well-known directory rather
   than bare at the root.
+
+Direction determines the install target. An **outside** request — `--repo`,
+`--github`, `--project`, `--package` — points at something and installs
+**globally** (`~/.dotnet/bin`). An **inside** request — a bare `.` when the
+directory advertises tools — installs **locally** (`./.dotnet/bin`), so a repo's
+own dev tooling never pollutes the global set. `--repo`/`--github` require the
+repo to advertise (bundle or `project`) unless `--project` names one explicitly;
+`.` with no manifest degrades to an outside request (interactive global install,
+or an error when piped).
 
 A repo can advertise either a single tool or a set of tools. A single-tool repo
 names the project to build (and, optionally, its `update` channel) — useful when
@@ -128,8 +139,8 @@ A repo advertises a set of tools by listing repo-relative projects in a
 
 This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted
 to build-from-source: the entries reference projects in the repo (the "local"
-flavor) rather than NuGet package ids. Installing from the repo root
-(`--github`, `--git`, or a local checkout — `dotnet-install .`) builds and
+flavor) rather than NuGet package ids. Installing from the repo
+(`--github`, `--repo`, or a local checkout — `dotnet-install .`) builds and
 installs every entry, recording per-tool provenance so each updates
 independently. Installation stops at the first failure and leaves
 already-installed tools in place. An explicit `--project` overrides the bundle.

@@ -97,6 +97,16 @@ record ShellConfig(string ShellName, string? RcFile, string? RcFileAbsolute, str
         ? $"# Added by dotnet-install\n{EnvLine}\n{ExportLine}\n"
         : $"#!/bin/sh\n# Added by dotnet-install\n{EnvLine}\n{ExportLine}\n";
 
+    /// <summary>Write the env file to disk (creating its directory if needed).</summary>
+    public void WriteEnvFile()
+    {
+        string envPath = EnvFileAbsolute;
+        string? envDir = Path.GetDirectoryName(envPath);
+        if (envDir is not null)
+            Directory.CreateDirectory(envDir);
+        File.WriteAllText(envPath, EnvFileContent);
+    }
+
     /// <summary>
     /// The line to append to the rc file — sources the env file.
     /// </summary>
@@ -197,6 +207,44 @@ static class ShellHint
         Console.WriteLine($"Run doctor to configure your PATH:");
         Console.WriteLine();
         Console.WriteLine($"dotnet-install doctor --fix");
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// After a repo-local install (<c>&lt;repo&gt;/.dotnet/bin</c>), print a transient
+    /// activation line. Repo-local paths are never written to the global shell profile,
+    /// so this writes the env file and shows a per-shell source command relative to the
+    /// current directory (e.g. <c>. .dotnet/bin/env</c>).
+    /// </summary>
+    public static void PrintRepoLocalActivation(string installDir)
+    {
+        string fullDir = Path.GetFullPath(installDir);
+
+        Console.WriteLine();
+        string rel = Path.GetRelativePath(Directory.GetCurrentDirectory(), fullDir);
+        Console.WriteLine($"Installed to {rel}");
+
+        if (ShellConfig.IsOnPath(fullDir))
+            return;
+
+        if (OperatingSystem.IsWindows())
+        {
+            Console.WriteLine();
+            Console.WriteLine("Activate for this session:");
+            Console.WriteLine($"  $env:PATH = \"{fullDir};$env:PATH\"");
+            Console.WriteLine();
+            return;
+        }
+
+        var config = ShellConfig.Detect(fullDir);
+        config.WriteEnvFile();
+
+        string envFile = Path.GetRelativePath(Directory.GetCurrentDirectory(), config.EnvFileAbsolute);
+        string sourceCommand = config.ShellName == "fish" ? $"source {envFile}" : $". {envFile}";
+
+        Console.WriteLine();
+        Console.WriteLine("Activate for this shell (transient — not added to your shell profile):");
+        Console.WriteLine($"  {sourceCommand}");
         Console.WriteLine();
     }
 }

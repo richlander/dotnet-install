@@ -67,7 +67,7 @@ static class GitSource
                         Console.Error.WriteLine("error: remote history has diverged (force push detected)");
                         Console.Error.WriteLine("Uninstall and reinstall the tool to continue:");
                         Console.Error.WriteLine($"  dotnet-install rm <tool>");
-                        Console.Error.WriteLine($"  dotnet-install --git {url}");
+                        Console.Error.WriteLine($"  dotnet-install --repo {url}");
                         return 1;
                     }
                 }
@@ -96,6 +96,9 @@ static class GitSource
             };
             return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
         }
+
+        if (!RequireAdvertised(config, projectOverride))
+            return 1;
 
         string? projectFile = DiscoverProject(repoDir, projectOverride);
         if (projectFile is null)
@@ -233,6 +236,9 @@ static class GitSource
         }
 
         // Discover project
+        if (!RequireAdvertised(config, projectOverride))
+            return 1;
+
         string? projectFile = DiscoverProject(repoDir, projectOverride);
         if (projectFile is null)
             return 1;
@@ -252,6 +258,22 @@ static class GitSource
     }
 
     // ---- Project discovery ----
+
+    /// <summary>
+    /// A repo installed with <c>--repo</c>/<c>--github</c> must advertise its tools via
+    /// <c>.dotnet-install/.dotnet-install.json</c> (a bundle, handled earlier, or a
+    /// single <c>project</c>). An explicit <c>--project</c> override bypasses this.
+    /// Returns false (after printing an error) when nothing is advertised.
+    /// </summary>
+    internal static bool RequireAdvertised(ToolConfig? config, string? projectOverride)
+    {
+        if (projectOverride is not null || config?.Project is not null)
+            return true;
+
+        Console.Error.WriteLine($"error: this repo does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName}).");
+        Console.Error.WriteLine("Pass --project <path> to install a specific project from it.");
+        return false;
+    }
 
     static string? DiscoverProject(string repoDir, string? projectOverride)
     {

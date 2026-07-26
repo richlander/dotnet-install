@@ -49,11 +49,12 @@ static class CommandLineBuilder
             Description = "Install from a GitHub repository",
             HelpName = "owner/repo[@ref]"
         };
-        var gitOption = new Option<string?>("--git")
+        var repoOption = new Option<string?>("--repo")
         {
-            Description = "Install from a git URL",
-            HelpName = "url"
+            Description = "Clone/build a repo (URL or local path) and install globally",
+            HelpName = "url|path"
         };
+        repoOption.Aliases.Add("--git");
         var branchOption = new Option<string?>("--branch")
         {
             Description = "Git branch to track (updatable)",
@@ -79,7 +80,7 @@ static class CommandLineBuilder
         rootCommand.Arguments.Add(projectArg);
         rootCommand.Options.Add(packageOption);
         rootCommand.Options.Add(githubOption);
-        rootCommand.Options.Add(gitOption);
+        rootCommand.Options.Add(repoOption);
         rootCommand.Options.Add(branchOption);
         rootCommand.Options.Add(tagOption);
         rootCommand.Options.Add(revOption);
@@ -183,7 +184,7 @@ static class CommandLineBuilder
         installCommand.Arguments.Add(new Argument<string?>("project") { Arity = ArgumentArity.ZeroOrOne });
         installCommand.Options.Add(packageOption);
         installCommand.Options.Add(githubOption);
-        installCommand.Options.Add(gitOption);
+        installCommand.Options.Add(repoOption);
         installCommand.Options.Add(branchOption);
         installCommand.Options.Add(tagOption);
         installCommand.Options.Add(revOption);
@@ -199,7 +200,7 @@ static class CommandLineBuilder
                 arg,
                 parseResult.GetValue(packageOption),
                 parseResult.GetValue(githubOption),
-                parseResult.GetValue(gitOption),
+                parseResult.GetValue(repoOption),
                 parseResult.GetValue(branchOption),
                 parseResult.GetValue(tagOption),
                 parseResult.GetValue(revOption),
@@ -309,7 +310,7 @@ static class CommandLineBuilder
             string? project = parseResult.GetValue(projectArg);
             string? package = parseResult.GetValue(packageOption);
             string? github = parseResult.GetValue(githubOption);
-            string? git = parseResult.GetValue(gitOption);
+            string? git = parseResult.GetValue(repoOption);
             string? branch = parseResult.GetValue(branchOption);
             string? tag = parseResult.GetValue(tagOption);
             string? rev = parseResult.GetValue(revOption);

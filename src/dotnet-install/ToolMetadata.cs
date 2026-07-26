@@ -113,7 +113,7 @@ class InstallSource
 ///   directly (a project directory / local path). Describes that one tool
 ///   (<c>exe</c>, <c>update</c>).</item>
 ///   <item><b>Repo</b> — at <c>&lt;repo&gt;/.dotnet-install/.dotnet-install.json</c>,
-///   read when installing via the repo gesture (<c>--github</c>/<c>--git</c>).
+///   read when installing via the repo gesture (<c>--github</c>/<c>--repo</c>).
 ///   Advertises the repo's toolset (<c>bundle</c>). The repo root itself is
 ///   never scanned — only the <c>.dotnet-install/</c> directory.</item>
 /// </list>

@@ -72,19 +72,36 @@ Builds from the local source tree via `dotnet publish` (requires the .NET SDK).
 
 ### Install tools
 
+There are two directions, distinguished by whether you're pointing *at* a repo
+from outside or working *inside* one:
+
 ```bash
-# From a local project
+# Inside a repo — install its advertised tools LOCALLY (./.dotnet/bin)
 dotnet-install .
-dotnet-install src/my-tool
 
-# From NuGet
+# From outside — install GLOBALLY (~/.dotnet/bin)
 dotnet-install --package dotnet-inspect
-dotnet-install --package dotnet-runtimeinfo
 dotnet-install --package dotnet-inspect@0.16.0
-
-# From GitHub
 dotnet-install --github richlander/dotnet-runtimeinfo
+dotnet-install --repo https://github.com/richlander/dotnet-runtimeinfo
+dotnet-install --repo ../some/local/repo
+dotnet-install --project src/my-tool
 ```
+
+- **`dotnet-install .`** (inside request) installs a repo's *advertised* toolset
+  — from `./.dotnet-install/.dotnet-install.json` — into a repo-local
+  `./.dotnet/bin`, so it never pollutes your global tools. If the directory
+  advertises nothing, it's treated as an outside request: at a terminal it
+  scans for a project and installs it globally; when piped it errors (use
+  `--project .` to install globally in scripts).
+- **`--repo` / `--github`** (outside requests) build a repo and install
+  globally. They require the repo to advertise a tool or bundle via
+  `.dotnet-install/.dotnet-install.json` (or name one with `--project`).
+  `--github owner/repo` is shorthand for a `--repo` GitHub URL. `--git` is a
+  deprecated alias for `--repo`.
+- **`--project <path>`** installs a specific project globally (no manifest
+  needed). **`--package`** installs from NuGet.
+- Running `dotnet-install` with no arguments prints help.
 
 NuGet packages using the [DotNetCliTool v3][v3] layout are supported: a
 pointer package resolves to the right RID-specific payload for your platform,
@@ -171,12 +188,20 @@ for updates:
 
 ### Repo-local tools
 
-For a tool you want to build and test inside a single repo or worktree —
-without touching the global `~/.dotnet/bin` — install into a repo-local
-`.dotnet/bin/` directory:
+When a repo advertises its tools (a `.dotnet-install/.dotnet-install.json`
+manifest), running `dotnet-install .` inside it builds those tools into a
+repo-local `.dotnet/bin/` directory — decoupled from the volatile `artifacts/`
+output and never touching the global `~/.dotnet/bin`:
 
 ```bash
-dotnet-install . -o .dotnet/bin
+dotnet-install .
+```
+
+```text
+Installed to .dotnet/bin
+
+Activate for this shell (transient — not added to your shell profile):
+  . .dotnet/bin/env
 ```
 
 `doctor` is worktree-aware: run it from anywhere inside the repo and, if a
@@ -219,7 +244,7 @@ Managed or multi-file tools aren't supported here — install those with
 A repo can advertise what to install by adding a manifest in a well-known
 directory — `.dotnet-install/.dotnet-install.json` — not bare at the repo root
 (mirroring `.claude-plugin/` for skills). It's read whenever you install from
-the repo root: `dotnet-install --github owner/repo`, `--git <url>`, or a local
+the repo: `dotnet-install --github owner/repo`, `--repo <url|path>`, or a local
 checkout (`dotnet-install .`).
 
 A single-tool repo names the project to build (handy when it isn't at the repo
@@ -261,7 +286,7 @@ dotnet-install [<project>] [command] [options]
 Options:
   --package <name[@version]>   Install a tool from NuGet
   --github <owner/repo[@ref]>  Install from a GitHub repository
-  --git <url>                  Install from a git URL
+  --repo <url|path>            Clone/build a repo (URL or local path) and install globally
   --branch <name>              Git branch to track (updatable)
   --tag <name>                 Git tag to install (pinned)
   --rev <sha>                  Git commit SHA to install (pinned)
