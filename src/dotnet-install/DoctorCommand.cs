@@ -25,7 +25,10 @@ static class DoctorCommand
         if (pathOnly)
             return 0;
 
-        // Step 2: Drain global tools if configured
+        // Step 2: Repo-local tools (<git-root>/.dotnet/bin), when present in the CWD's repo
+        issues += CheckRepoLocalBin(installDir, fix);
+
+        // Step 3: Drain global tools if configured
         var config = UserConfig.Read(installDir);
         if (config.ManageGlobalTools)
         {
@@ -115,14 +118,136 @@ static class DoctorCommand
         return 0;
     }
 
-    static void WriteEnvFile(ShellConfig config)
+    /// <summary>
+    /// Report on a repo-local install directory (&lt;git-root&gt;/.dotnet/bin) when the
+    /// current directory is inside a repo that has one. Repo-local tools are a
+    /// worktree-scoped alternative to the global install: they are activated
+    /// transiently (by sourcing the env file) rather than via the global rc file,
+    /// so this only checks that the directory is git-ignored and offers a
+    /// per-shell activation line — it never writes to the user's shell profile.
+    /// </summary>
+    static int CheckRepoLocalBin(string primaryInstallDir, bool fix)
     {
-        string envPath = config.EnvFileAbsolute;
-        string? envDir = Path.GetDirectoryName(envPath);
-        if (envDir is not null)
-            Directory.CreateDirectory(envDir);
-        File.WriteAllText(envPath, config.EnvFileContent);
+        string? root = FindGitRoot(Directory.GetCurrentDirectory());
+        if (root is null)
+            return 0;
+
+        string binDir = Path.Combine(root, ".dotnet", "bin");
+        if (!Directory.Exists(binDir))
+            return 0;
+
+        // If the primary check already targeted this directory (e.g. `doctor -o
+        // .dotnet/bin`), don't report it twice.
+        if (PathsEqual(primaryInstallDir, binDir))
+            return 0;
+
+        int issues = 0;
+        string display = Path.GetRelativePath(Directory.GetCurrentDirectory(), binDir);
+
+        Console.WriteLine();
+        Console.WriteLine($"Repo-local tools: {display}");
+
+        // 1. Is the directory kept out of source control?
+        if (IsPathGitIgnored(root, binDir))
+        {
+            Console.WriteLine($"{Ok} .dotnet/ is git-ignored");
+        }
+        else if (fix)
+        {
+            AddToGitignore(root);
+            Console.WriteLine($"{Ok} Added .dotnet/ to .gitignore");
+        }
+        else
+        {
+            Console.WriteLine($"{Warn} .dotnet/ is not git-ignored");
+            Console.WriteLine("  Run with --fix to add it to .gitignore");
+            issues++;
+        }
+
+        // 2. Is it usable in this shell? Repo-local activation is transient — we
+        //    write the env file and show the source line; we never touch the rc file.
+        if (ShellConfig.IsOnPath(binDir))
+        {
+            Console.WriteLine($"{Ok} on PATH for this shell");
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            Console.WriteLine($"{Warn} not on PATH for this shell");
+            Console.WriteLine("  Activate for this session:");
+            Console.WriteLine($"    $env:PATH = \"{binDir};$env:PATH\"");
+            issues++;
+        }
+        else
+        {
+            var shellConfig = ShellConfig.Detect(binDir);
+            if (!File.Exists(shellConfig.EnvFileAbsolute))
+                WriteEnvFile(shellConfig);
+
+            string envFile = Path.GetRelativePath(Directory.GetCurrentDirectory(), shellConfig.EnvFileAbsolute);
+            string sourceCommand = shellConfig.ShellName == "fish"
+                ? $"source {envFile}"
+                : $". {envFile}";
+
+            Console.WriteLine($"{Warn} not on PATH for this shell");
+            Console.WriteLine("  Activate for this shell (transient — not added to your shell profile):");
+            Console.WriteLine($"    {sourceCommand}");
+            issues++;
+        }
+
+        return issues;
     }
+
+    /// <summary>Walk up from <paramref name="start"/> to the git repo root (worktree-aware: `.git` may be a file).</summary>
+    internal static string? FindGitRoot(string start)
+    {
+        var dir = new DirectoryInfo(Path.GetFullPath(start));
+        while (dir is not null)
+        {
+            string gitPath = Path.Combine(dir.FullName, ".git");
+            if (Directory.Exists(gitPath) || File.Exists(gitPath))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    /// <summary>True if <paramref name="path"/> is ignored by git (honors all .gitignore rules).</summary>
+    static bool IsPathGitIgnored(string root, string path)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("git", ["-C", root, "check-ignore", "-q", path])
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = Process.Start(psi);
+            if (p is null)
+                return false;
+            p.WaitForExit();
+            return p.ExitCode == 0; // 0 = path is ignored
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static void AddToGitignore(string root)
+    {
+        string gitignore = Path.Combine(root, ".gitignore");
+        string existing = File.Exists(gitignore) ? File.ReadAllText(gitignore) : "";
+        string separator = existing.Length > 0 && !existing.EndsWith('\n') ? "\n" : "";
+        File.AppendAllText(gitignore, $"{separator}\n# Added by dotnet-install (repo-local tools)\n.dotnet/\n");
+    }
+
+    static bool PathsEqual(string a, string b) =>
+        string.Equals(
+            Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),
+            Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    static void WriteEnvFile(ShellConfig config) => config.WriteEnvFile();
 
     static void WritePathToRcFile(ShellConfig config)
     {

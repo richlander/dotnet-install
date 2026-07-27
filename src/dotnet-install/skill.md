@@ -16,23 +16,25 @@ tools, use `dotnet tool install` with the .NET SDK.
 
 ## Install sources
 
-Each source requires an explicit flag. With no arguments,
-`dotnet-install` in a directory with a project builds and
-installs it (like `dotnet publish`). With nothing to act on,
-it prints help.
+Two directions. **Outside requests** (`--repo`, `--github`, `--project`,
+`--package`) point at something and install **globally** (`~/.dotnet/bin`).
+An **inside request** — a bare `.` in a repo that advertises tools via
+`.dotnet-install/.dotnet-install.json` — builds them **locally** to
+`./.dotnet/bin`. With no arguments, `dotnet-install` prints help.
 
 ```bash
-# Local project (default — works like dotnet publish)
-dotnet-install                                # current directory
-dotnet-install src/my-tool                    # positional path
-dotnet-install --project src/my-tool          # explicit (like dotnet run --project)
-dotnet-install app.cs                         # file-based app
+# Inside a repo that advertises tools → local ./.dotnet/bin
+dotnet-install .
+
+# Explicit project → global (like dotnet run --project)
+dotnet-install --project src/my-tool
+dotnet-install --project app.cs               # file-based app
 
 # NuGet package (no SDK required)
 dotnet-install --package dotnet-inspect
 dotnet-install --package dotnet-inspect@0.16.0  # pinned version
 
-# GitHub repository
+# GitHub repository (must advertise a manifest, or name --project)
 dotnet-install --github owner/repo            # tracks default branch, updatable
 dotnet-install --github owner/repo --branch main   # tracks branch, updatable
 dotnet-install --github owner/repo --tag v2.0      # pinned, no updates
@@ -40,14 +42,15 @@ dotnet-install --github owner/repo --rev abc123    # pinned, no updates
 dotnet-install --github owner/repo@v2.0            # shorthand, pinned
 dotnet-install --github owner/repo --ssh           # clone via SSH
 
-# Any git URL
-dotnet-install --git https://example.com/repo.git
-dotnet-install --git https://example.com/repo.git --tag v1.0
+# Any repo — git URL or local path → global
+dotnet-install --repo https://example.com/repo.git
+dotnet-install --repo https://example.com/repo.git --tag v1.0
+dotnet-install --repo ../some/local/repo
 ```
 
 `--path` is an alias for `--project`. When combined with
-`--github` or `--git`, `--project` specifies a sub-path
-within the cloned repository.
+`--github` or `--repo`, `--project` specifies a sub-path
+within the repository. `--git` is a deprecated alias for `--repo`.
 
 ## Git ref options
 

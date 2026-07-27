@@ -127,15 +127,45 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
+    public void ReadFromRepo_ParsesToolsArray()
+    {
+        WriteRepoManifest("""
+        {
+          "version": 3,
+          "name": "my-toolset",
+          "tools": [
+            { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
+            { "name": "tool-b", "project": "src/tool-b/tool-b.csproj" }
+          ],
+          "update": { "type": "nuget", "package": "my-toolset" }
+        }
+        """);
+
+        var config = ToolConfig.ReadFromRepo(_tempDir);
+
+        Assert.NotNull(config);
+        Assert.Equal(3, config.Version);
+        Assert.Equal("my-toolset", config.Name);
+        Assert.NotNull(config.Tools);
+        Assert.Equal(2, config.Tools.Count);
+        Assert.Equal("tool-a", config.Tools[0].Name);
+        Assert.Equal("src/tool-a/tool-a.csproj", config.Tools[0].Project);
+
+        var tools = config.GetTools();
+        Assert.Equal(2, tools.Count);
+        Assert.Equal("tool-b", tools[1].Name);
+    }
+
+    [Fact]
     public void Install_FailsAndStops_OnMissingProject()
     {
-        var bundle = new List<BundleEntry>
+        var tools = new List<Tool>
         {
             new() { Project = "does-not-exist.csproj" }
         };
 
         int result = BundleInstaller.Install(
-            _tempDir, bundle, _tempDir,
+            _tempDir, tools, _tempDir,
             new InstallSource { Type = "local" },
             quiet: true);
 
@@ -143,7 +173,7 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
-    public void Install_FailsOnEmptyBundle()
+    public void Install_FailsOnEmptyToolset()
     {
         int result = BundleInstaller.Install(
             _tempDir, [], _tempDir,
@@ -154,12 +184,17 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
-    public void Install_FailsOnEntryWithoutProject()
+    public void Install_FailsOnMultiToolEntryWithoutProject()
     {
-        var bundle = new List<BundleEntry> { new() { Project = null } };
+        // A multi-tool manifest cannot auto-detect; every entry must name a project.
+        var tools = new List<Tool>
+        {
+            new() { Name = "a", Project = "a.csproj" },
+            new() { Name = "b", Project = null }
+        };
 
         int result = BundleInstaller.Install(
-            _tempDir, bundle, _tempDir,
+            _tempDir, tools, _tempDir,
             new InstallSource { Type = "local" },
             quiet: true);
 

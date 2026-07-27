@@ -145,20 +145,36 @@ static class UpdateCommand
 
         Console.Write($"{tool.Name} ({repository} {shortCommit})... ");
 
-        // Resolve cache paths
-        int slashIndex = repository.IndexOf('/');
-        string owner = repository[..slashIndex];
-        string repo = repository[(slashIndex + 1)..];
-        string cacheBase = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".nuget", "git-tools");
-        string repoDir = Path.Combine(cacheBase, owner, repo, "repo");
+        // Provenance is either an owner/repo GitHub spec (Type "github") or a raw
+        // git URL (Type "git"); each caches its working clone differently and
+        // reinstalls through a different entry point.
+        bool isUrl = source.Type == "git";
+
+        string repoDir;
+        if (isUrl)
+        {
+            repoDir = GitSource.RepoCacheDirForUrl(repository);
+        }
+        else
+        {
+            int slashIndex = repository.IndexOf('/');
+            string owner = repository[..slashIndex];
+            string repo = repository[(slashIndex + 1)..];
+            repoDir = GitSource.RepoCacheDirForGitHub(owner, repo);
+        }
+
+        int Reinstall()
+        {
+            if (isUrl)
+                return GitSource.InstallFromUrl(repository, installDir, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
+            string spec = gitRef is not null ? $"{repository}@{gitRef}" : repository;
+            return GitSource.InstallFromGit(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
+        }
 
         if (!Directory.Exists(Path.Combine(repoDir, ".git")))
         {
             Console.WriteLine("not cached, reinstalling");
-            string spec = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-            return GitSource.InstallFromGit(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true);
+            return Reinstall();
         }
 
         // Fetch latest
@@ -194,8 +210,7 @@ static class UpdateCommand
         string shortLatest = latestCommit.Length >= 7 ? latestCommit[..7] : latestCommit;
         Console.WriteLine($"{shortCommit} -> {shortLatest}");
 
-        string spec2 = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-        return GitSource.InstallFromGit(spec2, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true);
+        return Reinstall();
     }
 
     // ---- Local update ----
@@ -254,7 +269,7 @@ static class UpdateCommand
             Commit = currentCommit
         };
 
-        return Installer.Install(projectPath, installDir, newSource, quiet: true);
+        return Installer.Install(projectPath, installDir, newSource, quiet: true, commandName: tool.Name);
     }
 
     // ---- GitHub Release update ----

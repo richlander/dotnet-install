@@ -1,6 +1,12 @@
 /// <summary>
-/// Handles the default install command logic — local project, NuGet package,
-/// GitHub repo, or git URL. Explicit flags for each source, no heuristics.
+/// Handles the default install command logic. Two directions:
+/// <list type="bullet">
+/// <item><b>Outside requests</b> (<c>--repo</c>, <c>--github</c>, <c>--project</c>,
+/// <c>--package</c>) point at something to get the tool for use — installed globally.</item>
+/// <item><b>Inside request</b> (a bare positional path, typically <c>.</c>) honors a repo's
+/// own advertised tooling — installed locally to <c>&lt;dir&gt;/.dotnet/bin</c>. With no
+/// manifest it degrades to an outside request (global) interactively, or errors when piped.</item>
+/// </list>
 /// </summary>
 static class InstallAction
 {
@@ -8,7 +14,7 @@ static class InstallAction
         string? projectArg,
         string? packageSpec,
         string? githubSpec,
-        string? gitUrl,
+        string? repoSpec,
         string? branch,
         string? tag,
         string? rev,
@@ -18,94 +24,171 @@ static class InstallAction
         bool useSsh,
         bool requireSourceLink)
     {
-        string installDir = outputDir
+        string globalDir = outputDir
             ?? (useLocalBin ? Installer.LocalBinDir : Installer.DefaultInstallDir);
+
+        // ---- Outside requests: install globally ----
 
         // --package: NuGet install
         if (packageSpec is not null)
         {
-            int r = await Installer.InstallPackageAsync(packageSpec, installDir, requireSourceLink);
-            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            int r = await Installer.InstallPackageAsync(packageSpec, globalDir, requireSourceLink);
+            if (r == 0) ShellHint.PrintIfNeeded(globalDir);
             return r;
         }
 
-        // --github: GitHub owner/repo shorthand
+        // --github: GitHub owner/repo shorthand (sugar over --repo). Requires an
+        // advertised manifest unless --project names a project explicitly.
         if (githubSpec is not null)
         {
             if (!CheckPrereqs(git: true, dotnet: true))
                 return 1;
 
-            int r = GitSource.InstallFromGit(githubSpec, installDir, useSsh, branch, tag, rev, projectPath, requireSourceLink);
-            if (r == 0) ShellHint.PrintIfNeeded(installDir);
+            int r = GitSource.InstallFromGit(githubSpec, globalDir, useSsh, branch, tag, rev, projectPath, requireSourceLink);
+            if (r == 0) ShellHint.PrintIfNeeded(globalDir);
             return r;
         }
 
-        // --git: arbitrary git URL
-        if (gitUrl is not null)
+        // --repo: git URL (clone) or local repo path (build in place). Global install;
+        // requires an advertised manifest unless --project is given.
+        if (repoSpec is not null)
         {
+            if (Directory.Exists(repoSpec))
+            {
+                if (!CheckPrereqs(dotnet: true))
+                    return 1;
+
+                int r = InstallOutsideRepo(repoSpec, globalDir, projectPath, requireSourceLink);
+                if (r == 0) ShellHint.PrintIfNeeded(globalDir);
+                return r;
+            }
+
             if (!CheckPrereqs(git: true, dotnet: true))
                 return 1;
 
-            int r = GitSource.InstallFromUrl(gitUrl, installDir, branch, tag, rev, projectPath, requireSourceLink);
-            if (r == 0) ShellHint.PrintIfNeeded(installDir);
-            return r;
+            int gr = GitSource.InstallFromUrl(repoSpec, globalDir, branch, tag, rev, projectPath, requireSourceLink);
+            if (gr == 0) ShellHint.PrintIfNeeded(globalDir);
+            return gr;
         }
 
-        // Local project: positional arg, --project/--path, or current directory
-        string? localPath = projectArg ?? projectPath;
-
-        if (localPath is not null)
+        // --project (standalone): explicit project path → global.
+        if (projectArg is null && projectPath is not null)
         {
             if (!CheckPrereqs(dotnet: true))
                 return 1;
 
-            // A repo checked out locally can advertise a toolset ("bundle").
-            if (TryInstallLocalBundle(localPath, installDir, requireSourceLink) is int bundleResult)
+            if (TryInstallLocalProject(projectPath, globalDir, requireSourceLink) is int pr)
             {
-                if (bundleResult == 0) ShellHint.PrintIfNeeded(installDir);
-                return bundleResult;
+                if (pr == 0) ShellHint.PrintIfNeeded(globalDir);
+                return pr;
             }
 
-            // A repo can advertise a single tool (project + update channel) via
-            // .dotnet-install/.dotnet-install.json; otherwise fall back to scanning.
-            if (TryInstallLocalProject(localPath, installDir, requireSourceLink) is int projectResult)
-            {
-                if (projectResult == 0) ShellHint.PrintIfNeeded(installDir);
-                return projectResult;
-            }
-
-            Console.Error.WriteLine($"error: no project file found in '{localPath}'");
+            Console.Error.WriteLine($"error: no project file found in '{projectPath}'");
             return 1;
         }
 
-        // No source specified — try current directory
-        if (Directory.Exists(".") && ToolConfig.ReadFromRepo(".") is { } cwdConfig
-            && (cwdConfig.Bundle is { Count: > 0 } || cwdConfig.Project is not null))
-        {
-            if (!CheckPrereqs(dotnet: true))
-                return 1;
-            int r = TryInstallLocalBundle(".", installDir, requireSourceLink)
-                ?? TryInstallLocalProject(".", installDir, requireSourceLink)
-                ?? 1;
-            if (r == 0) ShellHint.PrintIfNeeded(installDir);
-            return r;
-        }
-
-        string? cwdProject = FindProjectFile(".");
-        if (cwdProject is not null)
+        // ---- Inside request: positional path (typically ".") ----
+        if (projectArg is not null)
         {
             if (!CheckPrereqs(dotnet: true))
                 return 1;
 
-            int r = Installer.Install(cwdProject, installDir, CreateLocalSource(cwdProject), requireSourceLink);
-            if (r == 0) ShellHint.PrintIfNeeded(installDir);
-            return r;
+            return InstallInside(projectArg, outputDir, globalDir, requireSourceLink);
         }
 
-        // Nothing to act on — show help
+        // Nothing specified — show help.
         var rootCommand = CommandLineBuilder.CreateRootCommand();
         HelpWriter.WriteHelp(rootCommand);
         return 0;
+    }
+
+    /// <summary>
+    /// The inside gesture (<c>dotnet-install .</c>): when the directory advertises tools via
+    /// <c>.dotnet-install/</c>, install them locally to <c>&lt;dir&gt;/.dotnet/bin</c>. With no
+    /// manifest, treat it as an outside request → global: interactively scan/pick a project,
+    /// or (when piped) error and point at the explicit gesture.
+    /// </summary>
+    static int InstallInside(string dir, string? outputOverride, string globalDir, bool requireSourceLink)
+    {
+        if (!Directory.Exists(dir))
+        {
+            Console.Error.WriteLine($"error: directory not found: '{dir}'");
+            return 1;
+        }
+
+        var config = ToolConfig.ReadFromRepo(dir);
+        var tools = config?.GetTools() ?? [];
+        bool advertised = tools.Count > 0;
+
+        if (advertised)
+        {
+            string localDir = outputOverride ?? Path.Combine(Path.GetFullPath(dir), ".dotnet", "bin");
+            string fullDir = Path.GetFullPath(dir);
+            var source = new InstallSource { Type = "local", Commit = GitCommit(fullDir) };
+            // Inside/local install always rebuilds from the checkout, so no update
+            // channel is recorded — updates come from re-running against the repo.
+            int r = BundleInstaller.Install(fullDir, tools, localDir, source, requireSourceLink, update: null);
+            if (r == 0) ShellHint.PrintRepoLocalActivation(localDir);
+            return r;
+        }
+
+        // No manifest → outside request → global.
+        if (Console.IsInputRedirected)
+        {
+            Console.Error.WriteLine($"error: '{dir}' does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName} not found).");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("To install a project from here globally, name it explicitly:");
+            Console.Error.WriteLine($"  dotnet-install --project {dir}");
+            return 1;
+        }
+
+        string targetDir = outputOverride ?? globalDir;
+        string? projectFile = FindProjectFile(dir);
+        if (projectFile is null)
+        {
+            Console.Error.WriteLine($"error: no project file found in '{dir}'");
+            return 1;
+        }
+
+        int gr2 = Installer.Install(projectFile, targetDir, CreateLocalSource(projectFile), requireSourceLink);
+        if (gr2 == 0) ShellHint.PrintIfNeeded(targetDir);
+        return gr2;
+    }
+
+    /// <summary>
+    /// A local repo path passed to <c>--repo</c>: built in place and installed globally.
+    /// Requires an advertised manifest (bundle or project) unless <c>--project</c> is given.
+    /// </summary>
+    static int InstallOutsideRepo(string dir, string globalDir, string? projectOverride, bool requireSourceLink)
+    {
+        if (projectOverride is not null)
+        {
+            string proj = Path.Combine(dir, projectOverride);
+            string? projectFile = FindProjectFile(proj);
+            if (projectFile is null)
+            {
+                Console.Error.WriteLine($"error: project not found: {projectOverride}");
+                return 1;
+            }
+            return Installer.Install(projectFile, globalDir, CreateLocalSource(projectFile), requireSourceLink);
+        }
+
+        var config = ToolConfig.ReadFromRepo(dir);
+        var tools = config?.GetTools() ?? [];
+        if (tools.Count == 0)
+        {
+            if (config is null)
+                Console.Error.WriteLine($"error: '{dir}' does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName} not found).");
+            else
+                Console.Error.WriteLine($"error: {ToolConfig.RepoDirName}/{ToolConfig.FileName} is present but advertises no tools.");
+            Console.Error.WriteLine("Pass --project <path> to install a specific project from it.");
+            return 1;
+        }
+
+        // Outside request → global install honors the repo's declared update channel.
+        string fullDir = Path.GetFullPath(dir);
+        var source = new InstallSource { Type = "local", Commit = GitCommit(fullDir) };
+        return BundleInstaller.Install(fullDir, tools, globalDir, source, requireSourceLink, update: config?.Update);
     }
 
     static bool CheckPrereqs(bool git = false, bool dotnet = false, string? context = null)
@@ -158,58 +241,33 @@ static class InstallAction
     }
 
     /// <summary>
-    /// If <paramref name="path"/> is a directory whose <c>.dotnet-install/.dotnet-install.json</c>
-    /// advertises a bundle, builds and installs every listed project. Returns the exit
-    /// code, or null if there is no advertised bundle to act on.
-    /// </summary>
-    static int? TryInstallLocalBundle(string path, string installDir, bool requireSourceLink)
-    {
-        if (!Directory.Exists(path))
-            return null;
-
-        var config = ToolConfig.ReadFromRepo(path);
-        if (config?.Bundle is not { Count: > 0 } bundle)
-            return null;
-
-        string fullDir = Path.GetFullPath(path);
-        var source = new InstallSource
-        {
-            Type = "local",
-            Commit = GitCommit(fullDir)
-        };
-
-        return BundleInstaller.Install(fullDir, bundle, installDir, source, requireSourceLink);
-    }
-
-    /// <summary>
-    /// Installs a single tool from a local directory or file path. When <paramref name="path"/>
-    /// is a directory whose <c>.dotnet-install/.dotnet-install.json</c> advertises a
-    /// <c>project</c>, that project (and its <c>update</c> channel) is used; otherwise the
-    /// path is scanned for a project file. Returns the exit code, or null if no project
-    /// could be resolved (so the caller can decide whether that is an error).
+    /// Installs a single tool from an explicit <c>--project</c> path (a directory or a
+    /// project/file-based-app file). When the path is a directory whose
+    /// <c>.dotnet-install/.dotnet-install.json</c> advertises exactly one tool with a
+    /// <c>project</c>, that project (its command <c>name</c> and <c>update</c> channel)
+    /// is honored; otherwise the path is scanned for a project file. Returns the exit
+    /// code, or null if no project could be resolved (so the caller can report it).
     /// </summary>
     static int? TryInstallLocalProject(string path, string installDir, bool requireSourceLink)
     {
         var repoConfig = Directory.Exists(path) ? ToolConfig.ReadFromRepo(path) : null;
 
-        string? projectFile;
-        if (repoConfig?.Project is not null)
+        if (repoConfig?.GetTools() is { Count: 1 } tools && tools[0].Project is { } toolProject)
         {
-            projectFile = Path.GetFullPath(Path.Combine(path, repoConfig.Project));
+            string projectFile = Path.GetFullPath(Path.Combine(path, toolProject));
             if (!File.Exists(projectFile))
             {
-                Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {repoConfig.Project}");
+                Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {toolProject}");
                 return 1;
             }
-        }
-        else
-        {
-            projectFile = FindProjectFile(path);
-            if (projectFile is null)
-                return null;
+            return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink, update: repoConfig.Update, commandName: tools[0].Name);
         }
 
-        return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink, update: repoConfig?.Update);
+        string? found = FindProjectFile(path);
+        if (found is null)
+            return null;
+
+        return Installer.Install(found, installDir, CreateLocalSource(found), requireSourceLink, update: repoConfig?.Update);
     }
 
     static InstallSource CreateLocalSource(string projectFile)

@@ -8,6 +8,42 @@ using System.CommandLine.Parsing;
 /// </summary>
 static class CommandLineBuilder
 {
+    /// <summary>
+    /// The root command name. System.CommandLine strips a leading token whose file
+    /// name matches this (treating it as the invocation path), which would swallow a
+    /// legitimate positional path ending in it.
+    /// </summary>
+    internal const string CommandName = "dotnet-install";
+
+    /// <summary>
+    /// Guards the first argument against System.CommandLine's invocation-path
+    /// stripping: when it is a positional path whose file name matches
+    /// <see cref="CommandName"/> (e.g. <c>./dotnet-install</c> or a clone directory
+    /// of this repo), it would otherwise be silently dropped as the invocation path.
+    /// The stripping only affects the very first token, so when there are other
+    /// arguments the offending path is moved to the end (past any options, which
+    /// bind by name regardless of position); when it is the only argument, it is
+    /// separated with <c>--</c>. Returns the args unchanged otherwise.
+    /// </summary>
+    internal static string[] NormalizeArgs(string[] args)
+    {
+        if (args.Length > 0 && !args[0].StartsWith('-') &&
+            string.Equals(Path.GetFileNameWithoutExtension(args[0].TrimEnd('/', '\\')),
+                CommandName, StringComparison.OrdinalIgnoreCase))
+        {
+            // Sole token: separate it so it is parsed as the project operand rather
+            // than the invocation path.
+            if (args.Length == 1)
+                return ["--", args[0]];
+
+            // Otherwise move it past the remaining arguments so trailing options
+            // still bind, while it is no longer the (stripped) first token.
+            return [.. args[1..], args[0]];
+        }
+
+        return args;
+    }
+
     public static RootCommand CreateRootCommand()
     {
         var rootCommand = new RootCommand("Install .NET executables to PATH — like cargo install and go install");
@@ -49,11 +85,12 @@ static class CommandLineBuilder
             Description = "Install from a GitHub repository",
             HelpName = "owner/repo[@ref]"
         };
-        var gitOption = new Option<string?>("--git")
+        var repoOption = new Option<string?>("--repo")
         {
-            Description = "Install from a git URL",
-            HelpName = "url"
+            Description = "Clone/build a repo (URL or local path) and install globally",
+            HelpName = "url|path"
         };
+        repoOption.Aliases.Add("--git");
         var branchOption = new Option<string?>("--branch")
         {
             Description = "Git branch to track (updatable)",
@@ -79,7 +116,7 @@ static class CommandLineBuilder
         rootCommand.Arguments.Add(projectArg);
         rootCommand.Options.Add(packageOption);
         rootCommand.Options.Add(githubOption);
-        rootCommand.Options.Add(gitOption);
+        rootCommand.Options.Add(repoOption);
         rootCommand.Options.Add(branchOption);
         rootCommand.Options.Add(tagOption);
         rootCommand.Options.Add(revOption);
@@ -183,7 +220,7 @@ static class CommandLineBuilder
         installCommand.Arguments.Add(new Argument<string?>("project") { Arity = ArgumentArity.ZeroOrOne });
         installCommand.Options.Add(packageOption);
         installCommand.Options.Add(githubOption);
-        installCommand.Options.Add(gitOption);
+        installCommand.Options.Add(repoOption);
         installCommand.Options.Add(branchOption);
         installCommand.Options.Add(tagOption);
         installCommand.Options.Add(revOption);
@@ -199,7 +236,7 @@ static class CommandLineBuilder
                 arg,
                 parseResult.GetValue(packageOption),
                 parseResult.GetValue(githubOption),
-                parseResult.GetValue(gitOption),
+                parseResult.GetValue(repoOption),
                 parseResult.GetValue(branchOption),
                 parseResult.GetValue(tagOption),
                 parseResult.GetValue(revOption),
@@ -309,7 +346,7 @@ static class CommandLineBuilder
             string? project = parseResult.GetValue(projectArg);
             string? package = parseResult.GetValue(packageOption);
             string? github = parseResult.GetValue(githubOption);
-            string? git = parseResult.GetValue(gitOption);
+            string? git = parseResult.GetValue(repoOption);
             string? branch = parseResult.GetValue(branchOption);
             string? tag = parseResult.GetValue(tagOption);
             string? rev = parseResult.GetValue(revOption);

@@ -7,18 +7,32 @@ static class GitSource
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".nuget", "git-tools");
 
-    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
+    // Cache directory (the working clone) for a tool installed from a raw git
+    // URL (provenance Type "git"). Keyed by a hash of the URL so update lands in
+    // the exact same clone the install created. Must match InstallFromUrl.
+    internal static string RepoCacheDirForUrl(string url)
+    {
+        string cacheKey = url.Replace("://", "/").Replace(":", "/").TrimEnd('/').TrimEnd(".git".ToCharArray());
+        string repoCache = Path.Combine(CacheBase, "_git", Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(cacheKey)))[..16].ToLowerInvariant());
+        return Path.Combine(repoCache, "repo");
+    }
+
+    // Cache directory for a tool installed from an owner/repo GitHub spec
+    // (provenance Type "github"). Must match InstallFromGit.
+    internal static string RepoCacheDirForGitHub(string owner, string repo) =>
+        Path.Combine(CacheBase, owner, repo, "repo");
+
+
+    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
     {
         string? gitRef = rev ?? tag ?? branch;
         bool pinned = rev is not null || tag is not null;
 
         // Derive a cache key from the URL
-        string cacheKey = url.Replace("://", "/").Replace(":", "/").TrimEnd('/').TrimEnd(".git".ToCharArray());
-        string repoCache = Path.Combine(CacheBase, "_git", Convert.ToHexString(
-            System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes(cacheKey)))[..16].ToLowerInvariant());
-        string repoDir = Path.Combine(repoCache, "repo");
-        Directory.CreateDirectory(repoCache);
+        string repoDir = RepoCacheDirForUrl(url);
+        Directory.CreateDirectory(Path.GetDirectoryName(repoDir)!);
 
         // Clone or fetch
         bool isExistingClone = Directory.Exists(Path.Combine(repoDir, ".git"));
@@ -67,7 +81,7 @@ static class GitSource
                         Console.Error.WriteLine("error: remote history has diverged (force push detected)");
                         Console.Error.WriteLine("Uninstall and reinstall the tool to continue:");
                         Console.Error.WriteLine($"  dotnet-install rm <tool>");
-                        Console.Error.WriteLine($"  dotnet-install --git {url}");
+                        Console.Error.WriteLine($"  dotnet-install --repo {url}");
                         return 1;
                     }
                 }
@@ -82,9 +96,10 @@ static class GitSource
 
         var config = ToolConfig.ReadFromRepo(repoDir);
 
-        // A repo can advertise a toolset ("bundle"). When present and no explicit
-        // project override is given, build and install every listed project.
-        if (projectOverride is null && config?.Bundle is { Count: > 0 } bundle)
+        // A repo advertises its toolset via the "tools" array. When present and no
+        // explicit project override is given, build and install every listed tool.
+        var tools = projectOverride is null ? (config?.GetTools() ?? []) : [];
+        if (tools.Count > 0)
         {
             var bundleSource = new InstallSource
             {
@@ -94,8 +109,11 @@ static class GitSource
                 Commit = commitSha,
                 Pinned = pinned
             };
-            return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
+            return BundleInstaller.Install(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
         }
+
+        if (requireAdvertised && !RequireAdvertised(config, projectOverride))
+            return 1;
 
         string? projectFile = DiscoverProject(repoDir, projectOverride);
         if (projectFile is null)
@@ -111,10 +129,16 @@ static class GitSource
             Pinned = pinned
         };
 
-        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
+        // A repo-level update channel describes a single advertised tool; suppress
+        // it when the repo advertises a bundle (a member reached here via its
+        // recorded project override updates from its git source instead).
+        InstallSource? recordedUpdate = (config?.GetTools().Count ?? 0) > 1 ? null : config?.Update;
+        // Preserve the caller-supplied installed command name (e.g. an update
+        // reinstalling under the tool's existing name) so it stays stable.
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: recordedUpdate, commandName: commandName);
     }
 
-    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false)
+    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
     {
         // Parse owner/repo[@ref]
         int atIndex = spec.IndexOf('@');
@@ -143,9 +167,8 @@ static class GitSource
         }
 
         // Resolve cache paths
-        string repoCache = Path.Combine(CacheBase, owner, repo);
-        string repoDir = Path.Combine(repoCache, "repo");
-        Directory.CreateDirectory(repoCache);
+        string repoDir = RepoCacheDirForGitHub(owner, repo);
+        Directory.CreateDirectory(Path.GetDirectoryName(repoDir)!);
 
         string cloneUrl = useSsh
             ? $"git@github.com:{owner}/{repo}.git"
@@ -213,12 +236,13 @@ static class GitSource
         // Capture commit SHA for provenance tracking
         string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
 
-        // Read repo config (.dotnet-install.json) for exe name and update plan
+        // Read repo config (.dotnet-install.json) for advertised tools and update plan
         var config = ToolConfig.ReadFromRepo(repoDir);
 
-        // A repo can advertise a toolset ("bundle"). When present and no explicit
-        // project override is given, build and install every listed project.
-        if (projectOverride is null && config?.Bundle is { Count: > 0 } bundle)
+        // A repo advertises its toolset via the "tools" array. When present and no
+        // explicit project override is given, build and install every listed tool.
+        var tools = projectOverride is null ? (config?.GetTools() ?? []) : [];
+        if (tools.Count > 0)
         {
             var bundleSource = new InstallSource
             {
@@ -229,10 +253,13 @@ static class GitSource
                 Ssh = useSsh,
                 Pinned = pinned
             };
-            return BundleInstaller.Install(repoDir, bundle, installDir, bundleSource, requireSourceLink, quiet);
+            return BundleInstaller.Install(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
         }
 
         // Discover project
+        if (requireAdvertised && !RequireAdvertised(config, projectOverride))
+            return 1;
+
         string? projectFile = DiscoverProject(repoDir, projectOverride);
         if (projectFile is null)
             return 1;
@@ -248,10 +275,36 @@ static class GitSource
             Pinned = pinned
         };
 
-        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: config?.Update);
+        // A repo-level update channel describes a single advertised tool; suppress
+        // it when the repo advertises a bundle (a member reached here via its
+        // recorded project override updates from its git source instead).
+        InstallSource? recordedUpdate = (config?.GetTools().Count ?? 0) > 1 ? null : config?.Update;
+        // Preserve the caller-supplied installed command name (e.g. an update
+        // reinstalling under the tool's existing name) so it stays stable.
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: recordedUpdate, commandName: commandName);
     }
 
     // ---- Project discovery ----
+
+    /// <summary>
+    /// A repo installed with <c>--repo</c>/<c>--github</c> must advertise its tools via
+    /// <c>.dotnet-install/.dotnet-install.json</c> (the <c>tools</c> array). An explicit
+    /// <c>--project</c> override bypasses this. Returns false (after printing an error)
+    /// when nothing is advertised, distinguishing a missing manifest from one that
+    /// declares no tools.
+    /// </summary>
+    internal static bool RequireAdvertised(ToolConfig? config, string? projectOverride)
+    {
+        if (projectOverride is not null || (config?.GetTools().Count ?? 0) > 0)
+            return true;
+
+        if (config is null)
+            Console.Error.WriteLine($"error: this repo does not advertise any tools ({ToolConfig.RepoDirName}/{ToolConfig.FileName} not found).");
+        else
+            Console.Error.WriteLine($"error: {ToolConfig.RepoDirName}/{ToolConfig.FileName} is present but advertises no tools.");
+        Console.Error.WriteLine("Pass --project <path> to install a specific project from it.");
+        return false;
+    }
 
     static string? DiscoverProject(string repoDir, string? projectOverride)
     {
@@ -269,17 +322,28 @@ static class GitSource
 
         // 2. Repo manifest (.dotnet-install/.dotnet-install.json)
         var repoManifest = ToolConfig.ReadFromRepo(repoDir);
-        if (repoManifest?.Project is not null)
+        if (repoManifest?.GetTools() is { Count: 1 } single && single[0].Project is { } manifestProject)
         {
-            string full = Path.GetFullPath(Path.Combine(repoDir, repoManifest.Project));
+            string full = Path.GetFullPath(Path.Combine(repoDir, manifestProject));
             if (File.Exists(full))
                 return full;
-            Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {repoManifest.Project}");
+            Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {manifestProject}");
             return null;
         }
 
-        // 3. Auto-detect: find project files with OutputType=Exe (excluding test projects)
-        //    Also detect file-based apps (.cs files with #:property directives)
+        // 3. Auto-detect the repo's sole executable project.
+        return AutoDetectProject(repoDir);
+    }
+
+    /// <summary>
+    /// Finds the repo's single executable project (or file-based app), excluding test
+    /// and non-packable projects. Returns null (after printing an error) when none or
+    /// several ambiguous candidates are found; prompts interactively on a TTY.
+    /// </summary>
+    internal static string? AutoDetectProject(string repoDir)
+    {
+        // Find project files with OutputType=Exe (excluding test projects).
+        // Also detect file-based apps (.cs files with #:property directives).
         List<string> exeProjects = [];
 
         foreach (string csproj in Directory.EnumerateFiles(repoDir, "*.*proj", SearchOption.AllDirectories))

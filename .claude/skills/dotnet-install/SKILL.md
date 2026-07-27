@@ -83,34 +83,61 @@ The tool lives at `src/dotnet-install/` in this repo:
 - `skill.md` — Embedded skill for AI assistants (end-user)
 - `HelpWriter.cs` — Markout-based help formatting
 
-## Three install modes
+## Inside vs. outside requests
 
-### 1. Local project (default)
+Installs come in two directions, which decide the target:
 
-Builds and installs from a local project directory or the current directory.
+- **Outside requests** point *at* something and install
+  **globally** to `~/.dotnet/bin`: `--repo`, `--github`,
+  `--project`, `--package`, and bare positional args.
+- **Inside request** — a bare `.` in a repo that advertises
+  tools via `.dotnet-install/.dotnet-install.json` — builds
+  the advertised toolset **locally** into `./.dotnet/bin`, so
+  a repo's dev tooling never pollutes the global set. It
+  writes an env file and prints a transient activation line
+  (`. .dotnet/bin/env`); it never edits the global profile.
+
+`dotnet install` with no args prints help. `dotnet install .`
+with no manifest degrades to an outside request: at a TTY it
+scans and installs a project globally; when piped it errors
+and points at `dotnet install --project .`.
+
+## Install modes
+
+### 1. Local project
+
+Builds and installs from a local project directory.
 Supports both `.csproj` projects and file-based apps (`.cs` with `#:property` directives).
 
 ```bash
-dotnet install                    # current directory
+dotnet install .                  # current dir (inside gesture if it advertises tools)
 dotnet install src/my-tool        # subdirectory
 dotnet install ~/git/my-tool      # explicit path
 dotnet install app.cs             # file-based app
 ```
 
-### 2. GitHub repository
+### 2. Repository (`--repo` / `--github`)
 
-Clones (or fetches) a GitHub repo, discovers the project, builds, and installs.
+Clones (or fetches) a repo, discovers the advertised project,
+builds, and installs globally.
+`--repo` takes a git URL (clone) or a local repo path (build in place);
+`--github owner/repo` is shorthand for a `--repo` GitHub URL.
+`--git` is a deprecated hidden alias for `--repo`.
 
 ```bash
+dotnet install --repo https://example.com/some/repo.git
+dotnet install --repo ../some/local/repo
 dotnet install --github richlander/dotnet-runtimeinfo
 dotnet install --github richlander/dotnet-runtimeinfo@v3.0.1
 dotnet install --github richlander/dotnet-runtimeinfo --ssh
 dotnet install --github richlander/dotnet-runtimeinfo --project dotnet-runtimeinfo.csproj
 ```
 
-If the user types `owner/repo` without `--github`,
-the tool prompts for confirmation before cloning
-(anti-typosquatting).
+`--repo`/`--github` require the repo to advertise a `tools`
+array in `.dotnet-install/.dotnet-install.json`, unless
+`--project` names one explicitly. If the user types
+`owner/repo` without `--github`, the tool prompts for
+confirmation before cloning (anti-typosquatting).
 
 ### 3. NuGet package
 
@@ -149,7 +176,11 @@ dotnet install completion        # shell completion setup
 
 - **Bare vs explicit**: bare positional args prompt to
   confirm remote sources (NuGet/GitHub); explicit flags
-  (`--package`, `--github`) skip all prompts
+  (`--package`, `--github`, `--repo`) skip all prompts
+- **Advertised manifest**: `--repo`/`--github` require the
+  repo to advertise a `tools` array in
+  `.dotnet-install/.dotnet-install.json` (or name one with
+  `--project`)
 - **Single-file only**: only single-file native executables
   install (Native AOT or self-contained single-file / CLI
   tools v2). Managed or multi-file tools are refused with a

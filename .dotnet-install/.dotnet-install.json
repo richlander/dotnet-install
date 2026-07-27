@@ -1,5 +1,12 @@
 {
-  "exe": "dotnet-install",
+  "version": 3,
+  "name": "dotnet-install",
+  "tools": [
+    {
+      "name": "dotnet-install",
+      "project": "src/dotnet-install/dotnet-install.csproj"
+    }
+  ],
   "update": {
     "type": "nuget",
     "package": "dotnet-install"
