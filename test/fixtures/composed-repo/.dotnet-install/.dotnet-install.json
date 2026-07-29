@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "name": "composed-repo",
+  "tools": [
+    { "name": "greet", "project": "src/greet.cs" },
+    { "name": "hello", "project": "src/hello/hello.csproj" },
+    { "name": "dotnet-inspect", "repository": "richlander/dotnet-inspect" },
+    { "package": "dotnet-runtimeinfo" }
+  ]
+}
