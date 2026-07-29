@@ -34,6 +34,57 @@ dotnet-install goes further:
 - **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
   not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
 
+## Familiar from `cargo` and `go`
+
+If you install CLI tools with Rust or Go, you already know how this works.
+The gesture is the same in all three: **name a source, get a command on
+your PATH**, built clean and dropped in one flat directory.
+
+| Toolchain | Command | Lands in |
+| --- | --- | --- |
+| Rust | `cargo install ripgrep` | `~/.cargo/bin/rg` |
+| Go | `go install github.com/junegunn/fzf@latest` | `~/go/bin/fzf` |
+| .NET | `dotnet-install --github richlander/dotnet-runtimeinfo` | `~/.dotnet/bin/dotnet-runtimeinfo` |
+
+Real output from each, with the dependency churn elided:
+
+```console
+$ cargo install ripgrep
+    Updating crates.io index
+  Installing ripgrep v15.2.0
+     Locking 46 packages to latest compatible versions
+   Compiling memchr v2.8.3
+   Compiling libc v0.2.189
+                        ... 31 more crates ...
+   Compiling ripgrep v15.2.0
+    Finished `release` profile [optimized + debuginfo] target(s) in 15.97s
+   Replacing /Users/rich/.cargo/bin/rg
+    Replaced package `ripgrep v15.1.0` with `ripgrep v15.2.0` (executable `rg`)
+```
+
+```console
+$ go install github.com/junegunn/fzf@latest
+go: downloading github.com/junegunn/fzf v0.74.1
+go: downloading github.com/charlievieth/fastwalk v1.0.14
+                        ... 4 more modules ...
+```
+
+```console
+$ dotnet-install --github richlander/dotnet-runtimeinfo
+Fetching richlander/dotnet-runtimeinfo...
+                        ... git fetch output ...
+Installing dotnet-runtimeinfo to /Users/rich/.dotnet/bin
+Publishing (Native AOT, Release)...
+Installed dotnet-runtimeinfo → /Users/rich/.dotnet/bin/dotnet-runtimeinfo
+```
+
+`go install` says nothing on success, `cargo install` narrates every crate;
+dotnet-install sits in between. All three end the same way — a single
+executable you can run by name.
+
+Installing from NuGet skips the build entirely: `--package` downloads a
+prebuilt native binary, so there's no compile step at all.
+
 ## Install
 
 No .NET required — downloads a self-contained native binary and configures
