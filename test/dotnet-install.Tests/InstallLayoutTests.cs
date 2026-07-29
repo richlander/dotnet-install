@@ -20,15 +20,38 @@ public class InstallLayoutTests : IDisposable
         try { Directory.Delete(_installDir, true); } catch { }
     }
 
-    // A current single-file install: a real binary plus _<name>/ holding only metadata.
+    // A single-file install from before the flat sidecar: a real binary plus
+    // _<name>/ holding only the old .tool.json.
     FileInfo WriteSingleFileInstall(string name)
     {
         string binary = Path.Combine(_installDir, name);
         File.WriteAllBytes(binary, [0x7F, (byte)'E', (byte)'L', (byte)'F']);
         string appDir = Path.Combine(_installDir, $"_{name}");
         Directory.CreateDirectory(appDir);
-        ToolMetadata.Write(appDir, new ToolManifest { Source = new InstallSource { Type = "nuget", Package = name } });
+        File.WriteAllText(Path.Combine(appDir, ToolMetadata.FileName),
+            $"{{\"source\":{{\"type\":\"nuget\",\"package\":\"{name}\"}}}}");
         return new FileInfo(binary);
+    }
+
+    // A current single-file install: a real binary plus a flat .tool.<name>.json,
+    // with no per-tool directory at all.
+    FileInfo WriteFlatInstall(string name)
+    {
+        string binary = Path.Combine(_installDir, name);
+        File.WriteAllBytes(binary, [0x7F, (byte)'E', (byte)'L', (byte)'F']);
+        ToolMetadata.Write(_installDir, name,
+            new ToolManifest { Source = new InstallSource { Type = "nuget", Package = name } });
+        return new FileInfo(binary);
+    }
+
+    [Fact]
+    public void FlatInstall_IsNotLegacy()
+    {
+        FileInfo entry = WriteFlatInstall("mytool");
+
+        Assert.False(Directory.Exists(Path.Combine(_installDir, "_mytool")));
+        Assert.False(InstallLayout.IsLegacyManaged(_installDir, "mytool", entry));
+        Assert.Equal(InstallLayout.SingleFileType, InstallLayout.ClassifyType(_installDir, "mytool", entry));
     }
 
     [Fact]
@@ -83,8 +106,8 @@ public class InstallLayoutTests : IDisposable
 
         InstallLayout.ResetMetadataDirectory(_installDir, "mytool");
 
-        Assert.True(Directory.Exists(appDir));
-        Assert.Empty(Directory.EnumerateFileSystemEntries(appDir));
+        // The directory is removed outright now; metadata lives in a flat sidecar.
+        Assert.False(Directory.Exists(appDir));
     }
 
     [Fact]

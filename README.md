@@ -137,15 +137,17 @@ dotnet-install --repo https://github.com/richlander/dotnet-runtimeinfo
 The source is always explicit for remote installs. With no arguments,
 dotnet-install works on the current directory, the way `dotnet publish` does.
 
-Everything lands in `~/.dotnet/bin`, flat:
+Everything lands in `~/.dotnet/bin`, flat — one binary per tool, plus a
+hidden sidecar recording where it came from:
 
 ```text
 ~/.dotnet/bin/
-  dotnet-inspect        # just the binary
-  _dotnet-inspect/
-    .tool.json          # install source (for `update`)
+  dotnet-inspect              # just the binary
+  .tool.dotnet-inspect.json   # install source (for `update`)
 ```
 
+No subdirectories, and nothing but binaries is visible in a normal
+directory listing.
 Use `-o <dir>` to install somewhere else, or `--local-bin` for `~/.local/bin`.
 
 ### NuGet packages

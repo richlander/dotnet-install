@@ -122,8 +122,7 @@ static class Installer
             {
                 InstallLayout.RemoveLegacyLauncher(installDir, installName);
                 InstallLayout.ResetMetadataDirectory(installDir, installName);
-                string metaDir = InstallLayout.MetadataDirectory(installDir, installName);
-                ToolMetadata.Write(metaDir, new ToolManifest { Source = source, Update = update });
+                ToolMetadata.Write(installDir, installName, new ToolManifest { Source = source, Update = update });
             }
 
             if (!quiet)
@@ -327,8 +326,7 @@ static class Installer
             // Write install metadata for update tracking
             InstallLayout.RemoveLegacyLauncher(installDir, commandName);
             InstallLayout.ResetMetadataDirectory(installDir, commandName);
-            string metaDir = InstallLayout.MetadataDirectory(installDir, commandName);
-            ToolMetadata.Write(metaDir, new ToolManifest
+            ToolMetadata.Write(installDir, commandName, new ToolManifest
             {
                 Source = new InstallSource
                 {
@@ -511,8 +509,7 @@ static class Installer
 
             InstallLayout.RemoveLegacyLauncher(installDir, commandName);
             InstallLayout.ResetMetadataDirectory(installDir, commandName);
-            string metaDir = InstallLayout.MetadataDirectory(installDir, commandName);
-            ToolMetadata.Write(metaDir, new ToolManifest
+            ToolMetadata.Write(installDir, commandName, new ToolManifest
             {
                 Source = new InstallSource { Type = "nuget", Package = packageName, Version = version }
             });

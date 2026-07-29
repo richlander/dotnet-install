@@ -2,26 +2,124 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 /// <summary>
-/// Metadata sidecar (.tool.json) written alongside installed tools.
-/// Tracks runtime dispatch info and install provenance for updates.
+/// Metadata sidecar written alongside installed tools, tracking runtime dispatch
+/// info and install provenance for updates.
+///
+/// The sidecar for a tool lives at <c>installDir/.tool.&lt;name&gt;.json</c> — a flat
+/// dotfile next to the binary. Older installs kept it as <c>.tool.json</c> inside a
+/// per-tool <c>_&lt;name&gt;/</c> directory; those are still read, and are migrated to
+/// the flat form the next time the tool is installed or updated.
 /// </summary>
 static class ToolMetadata
 {
+    /// <summary>Legacy sidecar filename, inside <c>_&lt;name&gt;/</c>.</summary>
     internal const string FileName = ".tool.json";
+
+    const string SidecarPrefix = ".tool.";
+    const string SidecarSuffix = ".json";
+
+    /// <summary>Sidecar path for a tool: <c>installDir/.tool.&lt;name&gt;.json</c>.</summary>
+    internal static string SidecarPath(string installDir, string toolName) =>
+        Path.Combine(installDir, SidecarPrefix + toolName + SidecarSuffix);
+
+    /// <summary>
+    /// The tool name a sidecar filename encodes, or null if it isn't a sidecar.
+    /// </summary>
+    internal static string? ToolNameFromSidecar(string fileName)
+    {
+        if (!fileName.StartsWith(SidecarPrefix, StringComparison.Ordinal) ||
+            !fileName.EndsWith(SidecarSuffix, StringComparison.Ordinal))
+            return null;
+
+        int length = fileName.Length - SidecarPrefix.Length - SidecarSuffix.Length;
+        return length > 0 ? fileName.Substring(SidecarPrefix.Length, length) : null;
+    }
 
     internal static string GetPath(string toolDir) =>
         Path.Combine(toolDir, FileName);
 
-    internal static void Write(string toolDir, ToolManifest manifest)
+    /// <summary>
+    /// Write a tool's sidecar, and clear the legacy <c>_&lt;name&gt;/</c> directory if
+    /// it held nothing but the old sidecar. A directory with other content is left
+    /// alone — that is stale managed payload, which the install path purges
+    /// separately via <see cref="InstallLayout.ResetMetadataDirectory"/>.
+    /// </summary>
+    internal static void Write(string installDir, string toolName, ToolManifest manifest)
     {
-        string path = GetPath(toolDir);
+        Directory.CreateDirectory(installDir);
         string json = JsonSerializer.Serialize(manifest, ToolManifestContext.Default.ToolManifest);
-        File.WriteAllText(path, json);
+        File.WriteAllText(SidecarPath(installDir, toolName), json);
+
+        string legacyDir = InstallLayout.MetadataDirectory(installDir, toolName);
+        if (Directory.Exists(legacyDir) && HoldsOnlyLegacySidecar(legacyDir))
+        {
+            try
+            {
+                Directory.Delete(legacyDir, recursive: true);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
-    internal static ToolManifest? Read(string toolDir)
+    static bool HoldsOnlyLegacySidecar(string dir)
     {
-        string path = GetPath(toolDir);
+        foreach (string path in Directory.EnumerateFileSystemEntries(dir))
+        {
+            if (!string.Equals(Path.GetFileName(path), FileName, StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Read a tool's sidecar, preferring the flat form and falling back to the
+    /// legacy <c>_&lt;name&gt;/.tool.json</c> so installs predating the move keep working.
+    /// </summary>
+    internal static ToolManifest? Read(string installDir, string toolName) =>
+        ReadFile(SidecarPath(installDir, toolName))
+        ?? ReadFile(GetPath(InstallLayout.MetadataDirectory(installDir, toolName)));
+
+    /// <summary>Read a legacy sidecar from a <c>_&lt;name&gt;/</c> directory.</summary>
+    internal static ToolManifest? ReadFromDirectory(string toolDir) =>
+        ReadFile(GetPath(toolDir));
+
+    /// <summary>
+    /// Every tool with a sidecar in <paramref name="installDir"/>, flat form and
+    /// legacy directories alike. Flat wins when a tool somehow has both.
+    /// </summary>
+    internal static List<(string Name, ToolManifest Manifest)> Discover(string installDir)
+    {
+        var found = new Dictionary<string, ToolManifest>(StringComparer.Ordinal);
+
+        if (!Directory.Exists(installDir))
+            return [];
+
+        foreach (string dir in Directory.GetDirectories(installDir))
+        {
+            string dirName = Path.GetFileName(dir);
+            if (!dirName.StartsWith('_') || dirName.Length < 2)
+                continue;
+
+            if (ReadFromDirectory(dir) is { } legacy)
+                found[dirName[1..]] = legacy;
+        }
+
+        foreach (string file in Directory.GetFiles(installDir))
+        {
+            if (ToolNameFromSidecar(Path.GetFileName(file)) is not { } name)
+                continue;
+
+            if (ReadFile(file) is { } manifest)
+                found[name] = manifest;
+        }
+
+        return found.Select(kv => (kv.Key, kv.Value)).OrderBy(t => t.Key).ToList();
+    }
+
+    static ToolManifest? ReadFile(string path)
+    {
         if (!File.Exists(path)) return null;
 
         try
@@ -33,6 +131,14 @@ static class ToolMetadata
         {
             return null;
         }
+    }
+
+    /// <summary>Delete a tool's sidecar, both flat and legacy forms.</summary>
+    internal static void Delete(string installDir, string toolName)
+    {
+        string sidecar = SidecarPath(installDir, toolName);
+        if (File.Exists(sidecar))
+            File.Delete(sidecar);
     }
 }
 

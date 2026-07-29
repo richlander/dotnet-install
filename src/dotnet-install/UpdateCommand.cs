@@ -120,13 +120,12 @@ static class UpdateCommand
         // Preserve the update plan in metadata (InstallPackageAsync wrote source only)
         if (result == 0 && tool.Manifest.Update is not null)
         {
-            string metaDir = Path.Combine(installDir, $"_{tool.Name}");
-            var manifest = ToolMetadata.Read(metaDir);
+            var manifest = ToolMetadata.Read(installDir, tool.Name);
             if (manifest is not null)
             {
                 manifest.Update = tool.Manifest.Update;
                 manifest.Update.Version = latestVersion;
-                ToolMetadata.Write(metaDir, manifest);
+                ToolMetadata.Write(installDir, tool.Name, manifest);
             }
         }
 
@@ -389,8 +388,7 @@ static class UpdateCommand
             // refreshed single-file binary is no longer classified as legacy.
             InstallLayout.RemoveLegacyLauncher(installDir, tool.Name);
             InstallLayout.ResetMetadataDirectory(installDir, tool.Name);
-            string toolDir = InstallLayout.MetadataDirectory(installDir, tool.Name);
-            ToolMetadata.Write(toolDir, new ToolManifest
+            ToolMetadata.Write(installDir, tool.Name, new ToolManifest
             {
                 Source = new InstallSource
                 {
@@ -572,21 +570,10 @@ static class UpdateCommand
 
     static List<ToolInfo> DiscoverTools(string installDir)
     {
-        var tools = new List<ToolInfo>();
-
-        foreach (string entry in Directory.GetDirectories(installDir))
-        {
-            string dirName = Path.GetFileName(entry);
-            if (!dirName.StartsWith('_'))
-                continue;
-
-            string toolName = dirName[1..]; // strip leading underscore
-            var manifest = ToolMetadata.Read(entry);
-            if (manifest?.Source is not null)
-                tools.Add(new ToolInfo(toolName, manifest));
-        }
-
-        return tools.OrderBy(t => t.Name).ToList();
+        return ToolMetadata.Discover(installDir)
+            .Where(t => t.Manifest.Source is not null)
+            .Select(t => new ToolInfo(t.Name, t.Manifest))
+            .ToList();
     }
 
     // ---- Process helpers ----

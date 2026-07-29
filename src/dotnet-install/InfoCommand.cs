@@ -17,7 +17,7 @@ static class InfoCommand
 
         var info = new FileInfo(entryPath);
         string appDir = Path.Combine(installDir, $"_{toolName}");
-        var manifest = Directory.Exists(appDir) ? ToolMetadata.Read(appDir) : null;
+        var manifest = ToolMetadata.Read(installDir, toolName);
 
         string type = InstallLayout.ClassifyType(installDir, toolName, info);
 

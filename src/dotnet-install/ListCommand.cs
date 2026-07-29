@@ -70,8 +70,7 @@ static class ListCommand
     static ToolManifest? ReadManifest(FileInfo f, string installDir)
     {
         string toolName = Path.GetFileNameWithoutExtension(f.Name);
-        string appDir = Path.Combine(installDir, $"_{toolName}");
-        return ToolMetadata.Read(appDir);
+        return ToolMetadata.Read(installDir, toolName);
     }
 
     /// <summary>
@@ -93,8 +92,9 @@ static class ListCommand
 
     static bool IsToolEntry(FileInfo f)
     {
-        // Skip _appname directories (multi-file tool storage)
-        if (f.Name.StartsWith('_'))
+        // Skip _appname directories (legacy multi-file tool storage) and the
+        // flat .tool.<name>.json metadata sidecars.
+        if (f.Name.StartsWith('_') || ToolMetadata.ToolNameFromSidecar(f.Name) is not null)
             return false;
 
         // Symlinks (single-file or multi-file launchers)

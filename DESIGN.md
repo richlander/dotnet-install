@@ -34,9 +34,16 @@ belongs to `dotnet tool install -g`.
 | `~/.dotnet/bin/`   | `dotnet-install`         | Real binaries, flat        |
 
 The single-file binary is copied directly into the install directory.
-No subdirectories, no shims — the binary *is* the tool. A `_<appname>/`
-sidecar directory holds only `.tool.json` metadata that records the
-install source for `update`.
+No subdirectories, no shims — the binary *is* the tool. Alongside it sits
+a `.tool.<name>.json` sidecar recording the install source for `update`.
+
+The sidecar is a flat dotfile rather than a per-tool directory, so the
+install directory stays one-file-per-tool and a plain `ls` shows only
+commands. Installs predating this layout kept the same metadata as
+`_<name>/.tool.json`; those are still read, and are rewritten to the flat
+form the next time the tool is installed or updated. A `_<name>/`
+directory holding anything more than that sidecar is a pre-redesign
+managed install, which is how `ls` and `info` still label those honestly.
 
 ## Cross-platform
 
