@@ -14,28 +14,39 @@ dotnet-install installs **single-file executables only** — Native AOT or
 self-contained single-file tools. For managed or multi-file tools, use
 `dotnet tool install` with the .NET SDK.
 
-## Why not `dotnet tool install`?
+## Install
 
-`dotnet tool install` requires the SDK, only installs from NuGet, and every
-tool runs as a managed DLL under `dotnet exec`.
+No .NET required — downloads a self-contained native binary and configures
+your PATH.
 
-dotnet-install goes further:
+**Linux / macOS:**
 
-- **No .NET required** — install and run Native AOT tools
-  without the SDK or runtime
-- **Uses the SDK if available** — build and install directly
-  from local projects and GitHub repos
-- **Update everything** — `dotnet-install update` checks all
-  installed tools at once, like `npm update`
-- **Just run it** — installed tools are on PATH; no `dotnet run`
-  needed to find the executable
-- **One gesture from source** — build and install in a single step, like
-  `cargo install`. The SDK has no publish-pack-install path: you
-  `dotnet pack`, then install from a local feed
-- **Clean release build** — always does a publish-optimized build,
-  just like `cargo install` and `go install`
-- **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
-  not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
+```bash
+curl --proto '=https' --tlsv1.2 -sSfL \
+  https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1 | iex
+```
+
+### Already have the SDK?
+
+```bash
+dotnet tool install -g dotnet-install
+```
+
+### From source
+
+For contributors or local development:
+
+```bash
+./install-source.sh
+```
+
+Builds from the local source tree via `dotnet publish` (requires the .NET SDK).
 
 ## Familiar from `cargo` and `go`
 
@@ -88,39 +99,28 @@ executable you can run by name.
 Installing from NuGet skips the build entirely: `--package` downloads a
 prebuilt native binary, so there's no compile step at all.
 
-## Install
+## Why not `dotnet tool install`?
 
-No .NET required — downloads a self-contained native binary and configures
-your PATH.
+`dotnet tool install` requires the SDK, only installs from NuGet, and every
+tool runs as a managed DLL under `dotnet exec`.
 
-**Linux / macOS:**
+dotnet-install goes further:
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSfL \
-  https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.sh | sh
-```
-
-**Windows (PowerShell):**
-
-```powershell
-irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1 | iex
-```
-
-### Already have the SDK?
-
-```bash
-dotnet tool install -g dotnet-install
-```
-
-### From source
-
-For contributors or local development:
-
-```bash
-./install-source.sh
-```
-
-Builds from the local source tree via `dotnet publish` (requires the .NET SDK).
+- **No .NET required** — install and run Native AOT tools
+  without the SDK or runtime
+- **Uses the SDK if available** — build and install directly
+  from local projects and GitHub repos
+- **Update everything** — `dotnet-install update` checks all
+  installed tools at once, like `npm update`
+- **Just run it** — installed tools are on PATH; no `dotnet run`
+  needed to find the executable
+- **One gesture from source** — build and install in a single step, like
+  `cargo install`. The SDK has no publish-pack-install path: you
+  `dotnet pack`, then install from a local feed
+- **Clean release build** — always does a publish-optimized build,
+  just like `cargo install` and `go install`
+- **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
+  not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
 
 ## Consuming tools
 
