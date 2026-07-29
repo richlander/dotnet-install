@@ -4,7 +4,7 @@
   "tools": [
     { "name": "greet", "project": "src/greet.cs" },
     { "name": "hello", "project": "src/hello/hello.csproj" },
-    { "name": "dotnet-inspect", "repository": "richlander/dotnet-inspect" },
+    { "name": "dotnet-inspect", "repository": { "url": "richlander/dotnet-inspect", "branch": "main" } },
     { "package": "dotnet-runtimeinfo" }
   ]
 }
