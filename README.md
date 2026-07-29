@@ -111,7 +111,7 @@ dotnet-install goes further:
 - **Uses the SDK if available** — build and install directly
   from local projects and GitHub repos
 - **Update everything** — `dotnet-install update` checks all
-  installed tools at once, like `npm update`
+  installed tools at once, like `npm update -g`
 - **Just run it** — installed tools are on PATH; no `dotnet run`
   needed to find the executable
 - **One gesture from source** — build and install in a single step, like
