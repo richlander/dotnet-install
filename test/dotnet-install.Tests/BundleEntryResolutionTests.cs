@@ -140,6 +140,29 @@ public class BundleEntryResolutionTests : IDisposable
         Assert.Null(BundleInstaller.Resolve(tool, _root, toolCount: 2));
     }
 
+    /// <summary>
+    /// A repository missing its url is reported as an incomplete repository, not
+    /// as a missing source — the user named one, it just lacks the one field that
+    /// says which repo.
+    /// </summary>
+    [Fact]
+    public void Repository_WithoutUrlIsStillDeclared()
+    {
+        var tool = new Tool { Repository = new RepositorySpec { Branch = "main" } };
+
+        Assert.Equal(["repository"], tool.DeclaredSources());
+        Assert.Null(BundleInstaller.Resolve(tool, _root, toolCount: 2));
+    }
+
+    [Fact]
+    public void Repository_EmptyObjectFails()
+    {
+        var tool = new Tool { Repository = new RepositorySpec() };
+
+        Assert.Equal(["repository"], tool.DeclaredSources());
+        Assert.Null(BundleInstaller.Resolve(tool, _root, toolCount: 2));
+    }
+
     [Fact]
     public void Repository_WithMultipleRefsFails()
     {

@@ -197,8 +197,15 @@ static class BundleInstaller
             return new PackageEntry(tool.Name, spec);
         }
 
-        if (tool.Repository is { Url: { Length: > 0 } url } repository)
+        if (tool.Repository is { } repository)
         {
+            if (string.IsNullOrWhiteSpace(repository.Url))
+            {
+                Console.Error.WriteLine(
+                    $"error: tool entry {Describe(tool)} has a \"repository\" with no \"url\"; give it an \"owner/repo\".");
+                return null;
+            }
+
             string[] refs = repository.DeclaredRefs();
 
             if (refs.Length > 1)
@@ -218,7 +225,7 @@ static class BundleInstaller
             }
 
             return new RepositoryEntry(
-                tool.Name, url, repository.Branch, repository.Tag, repository.Rev);
+                tool.Name, repository.Url, repository.Branch, repository.Tag, repository.Rev);
         }
 
         string full = Path.GetFullPath(Path.Combine(rootDir, tool.Project!));

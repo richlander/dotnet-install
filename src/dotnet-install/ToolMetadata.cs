@@ -395,7 +395,9 @@ class Tool
         var declared = new List<string>(3);
         if (!string.IsNullOrWhiteSpace(Project)) declared.Add("project");
         if (!string.IsNullOrWhiteSpace(Package)) declared.Add("package");
-        if (!string.IsNullOrWhiteSpace(Repository?.Url)) declared.Add("repository");
+        // Presence, not completeness: a repository missing its url is still a
+        // repository the user asked for, and saying so beats "names no source".
+        if (Repository is not null) declared.Add("repository");
         return [.. declared];
     }
 }
