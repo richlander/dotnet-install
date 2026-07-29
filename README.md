@@ -51,6 +51,33 @@ For contributors or local development:
 
 Builds from the local source tree via `dotnet publish` (requires the .NET SDK).
 
+## Why not `dotnet tool install`?
+
+`dotnet tool install` requires the SDK and only installs from NuGet.
+dotnet-install can do more with less.
+
+### On machines without .NET
+
+- **Install binary packages** — `--package` downloads a prebuilt Native AOT
+  binary from NuGet; nothing is compiled, so no SDK or runtime is needed
+- **Just run it** — installed tools are on PATH; no `dotnet run`
+  needed to find the executable
+- **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
+  not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
+- **Update everything** — `dotnet-install update` checks all
+  installed tools at once, like `npm update -g`
+
+### On machines with the .NET SDK
+
+- **Install from source** — build and install straight from a local
+  project or a GitHub repo
+- **One gesture** — build and install in a single step, like
+  `cargo install`. The SDK has no publish-pack-install path; you
+  `dotnet pack -o ./nupkg` and then
+  `dotnet tool install -g --add-source ./nupkg my-tool`
+- **Clean release build** — always does a publish-optimized build,
+  just like `cargo install` and `go install`
+
 ## Familiar for `cargo` and `go` users
 
 If you install CLI tools with Rust or Go, you already know how this works.
@@ -99,33 +126,6 @@ All three install single-file native executables.
 
 Installing from NuGet skips the build entirely: `--package` downloads a
 prebuilt native binary, so there's no compile step at all.
-
-## Why not `dotnet tool install`?
-
-`dotnet tool install` requires the SDK and only installs from NuGet.
-dotnet-install can do more with less.
-
-### On machines without .NET
-
-- **Install binary packages** — `--package` downloads a prebuilt Native AOT
-  binary from NuGet; nothing is compiled, so no SDK or runtime is needed
-- **Just run it** — installed tools are on PATH; no `dotnet run`
-  needed to find the executable
-- **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
-  not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
-- **Update everything** — `dotnet-install update` checks all
-  installed tools at once, like `npm update -g`
-
-### On machines with the .NET SDK
-
-- **Install from source** — build and install straight from a local
-  project or a GitHub repo
-- **One gesture** — build and install in a single step, like
-  `cargo install`. The SDK has no publish-pack-install path; you
-  `dotnet pack -o ./nupkg` and then
-  `dotnet tool install -g --add-source ./nupkg my-tool`
-- **Clean release build** — always does a publish-optimized build,
-  just like `cargo install` and `go install`
 
 ## Consuming tools
 
