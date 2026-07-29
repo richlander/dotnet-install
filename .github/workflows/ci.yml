@@ -16,6 +16,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       docs: ${{ steps.filter.outputs.docs }}
+      scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -33,6 +34,7 @@ jobs:
           if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"
             echo "docs=true" >> "$GITHUB_OUTPUT"
+            echo "scripts=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -40,19 +42,24 @@ jobs:
 
           code=false
           docs=false
+          scripts=false
 
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
-              src/*|*.props|.github/workflows/*) code=true ;;
+              src/*|test/*|*.props|.github/workflows/*) code=true ;;
             esac
             case "$file" in
               *.md|docs/*) docs=true ;;
+            esac
+            case "$file" in
+              *.sh|*.ps1) scripts=true ;;
             esac
           done <<< "$CHANGED"
 
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "docs=$docs" >> "$GITHUB_OUTPUT"
+          echo "scripts=$scripts" >> "$GITHUB_OUTPUT"
 
   markdownlint:
     needs: changes
@@ -67,6 +74,50 @@ jobs:
 
       - name: Run markdownlint
         run: npx markdownlint-cli2 '**/*.md'
+
+  # The install scripts are how most users first get the tool, and they are the
+  # one part of the repo the build cannot exercise.
+  scripts:
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # SC3043 flags `local`, which POSIX sh does not define but every shell that
+      # runs these (dash, bash, ash, zsh) implements. Same tradeoff rustup makes.
+      - name: shellcheck
+        run: shellcheck --exclude=SC3043 install.sh install-source.sh install-tool.sh
+
+      - name: Parse install.ps1
+        shell: pwsh
+        run: |
+          $errs = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path install.ps1), [ref]$null, [ref]$errs)
+          if ($errs) {
+            $errs | ForEach-Object {
+              Write-Host "::error file=install.ps1,line=$($_.Extent.StartLineNumber)::$($_.Message)"
+            }
+            exit 1
+          }
+          Write-Host "install.ps1 parses clean"
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Test
+        run: dotnet test test/dotnet-install.Tests -c Release
 
   build:
     needs: [changes, markdownlint]
