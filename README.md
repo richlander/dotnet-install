@@ -119,10 +119,11 @@ dotnet-install can do more with less.
 ### On machines with the .NET SDK
 
 - **Install from source** — build and install straight from a local
-  project or a GitHub repo, not just from a package
+  project or a GitHub repo
 - **One gesture** — build and install in a single step, like
-  `cargo install`. The SDK has no publish-pack-install path: you
-  `dotnet pack`, then install from a local feed
+  `cargo install`. The SDK has no publish-pack-install path; you
+  `dotnet pack -o ./nupkg` and then
+  `dotnet tool install -g --add-source ./nupkg my-tool`
 - **Clean release build** — always does a publish-optimized build,
   just like `cargo install` and `go install`
 
