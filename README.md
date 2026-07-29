@@ -102,8 +102,7 @@ prebuilt native binary, so there's no compile step at all.
 
 ## Why not `dotnet tool install`?
 
-`dotnet tool install` requires the SDK, only installs from NuGet, and every
-tool runs as a managed DLL under `dotnet exec`.
+`dotnet tool install` requires the SDK and only installs from NuGet.
 
 dotnet-install goes further:
 
