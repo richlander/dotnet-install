@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    Intentionally empty. MSBuild stops walking up once it finds a
+    Directory.Build.props, so this isolates the fixture from the repo root's
+    build settings (artifacts path, TreatWarningsAsErrors, AOT flags). The
+    fixture stands in for someone else's repo, so it should build the way that
+    repo would, not the way dotnet-install builds.
+  -->
+
+</Project>
