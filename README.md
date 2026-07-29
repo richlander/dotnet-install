@@ -156,13 +156,20 @@ Use `-o <dir>` to install somewhere else, or `--local-bin` for `~/.local/bin`.
 the package format: dotnet-install places native single-file executables, so
 a managed tool is rejected with a pointer at `dotnet tool install -g`.
 
-Within that rule, both current package layouts work:
+The tool generation is recorded in the package's `DotnetToolSettings.xml`
+(not the NuGet package type, which is `DotnetTool` throughout):
 
-| Layout | Supported | Notes |
+| Generation | Marker | Supported |
 | --- | --- | --- |
-| v1 (`DotNetCliToolReference`) | no | Project-scoped and always managed |
-| v2 (`DotnetToolSettings.xml`) | yes, if native | Includes RID-specific pointer packages |
-| v3 (`tools/manifest.json`) | yes, if native | RID index, bundle, and payload manifests |
+| v1 | `<DotNetCliTool Version="1">`, `Runner="dotnet"`, a `.dll` entry point | no — managed |
+| v2 | `<DotNetCliTool Version="2">` with `RuntimeIdentifierPackages` | yes — resolves to a RID-specific native payload |
+| v3 | `tools/manifest.json` | yes — RID index, bundle, and payload manifests |
+
+A v2 package is a pointer: it names a RID-specific package per platform, and
+dotnet-install redirects to the one matching yours. Those RID packages carry a
+real native binary (`Runner="executable"`). Many v2 families also publish an
+`any` fallback for unlisted platforms — that fallback is a managed v1 payload,
+so resolving to it fails the same way a v1 tool does.
 
 For [DotNetCliTool v3][v3] specifically, a pointer package resolves to the
 right RID-specific payload for your platform, and a bundle package installs
