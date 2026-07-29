@@ -10,6 +10,14 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
+# Cancel superseded PR runs so repeated pushes to a branch don't each consume a
+# full matrix. Pushes to main are never cancelled: release.yml publishes by CI
+# run id rather than building fresh, so a main run's artifacts are the release
+# and killing one could destroy a set someone meant to publish.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -20,29 +28,41 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
       - name: Detect changes
         id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Ask GitHub for the PR's own diff. Deriving it locally from
+          # base.sha..HEAD compares against the base branch *tip*, so anything
+          # that landed on main after the PR opened counts as changed here.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE=${{ github.event.pull_request.base.sha }}
+            CHANGED=$(gh pr diff ${{ github.event.pull_request.number }} --name-only) || CHANGED=
           else
-            BASE=${{ github.event.before }}
+            BEFORE=${{ github.event.before }}
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              BEFORE=HEAD~1
+            fi
+            # The clone is shallow, so BEFORE may not be present on a push of
+            # several commits.
+            CHANGED=$(git diff --name-only "$BEFORE"..."${{ github.sha }}" 2>/dev/null) || CHANGED=
           fi
-
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            echo "docs=true" >> "$GITHUB_OUTPUT"
-            echo "scripts=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          CHANGED=$(git diff --name-only "$BASE"..HEAD)
 
           code=false
           docs=false
           scripts=false
+
+          # An empty list means the diff failed, not that nothing changed --
+          # a real commit always touches something. Run everything rather than
+          # skip everything, so a broken diff can never silence CI.
+          if [ -z "$CHANGED" ]; then
+            echo "could not determine changed files; running all jobs"
+            code=true
+            docs=true
+            scripts=true
+          fi
 
           while IFS= read -r file; do
             [ -z "$file" ] && continue
@@ -60,6 +80,7 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "docs=$docs" >> "$GITHUB_OUTPUT"
           echo "scripts=$scripts" >> "$GITHUB_OUTPUT"
+          echo "code=$code docs=$docs scripts=$scripts"
 
   markdownlint:
     needs: changes
