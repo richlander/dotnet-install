@@ -158,7 +158,14 @@ Both fields are optional. `project` is present only in source scenarios (it is
 absent once a tool is published as a prebuilt package), and when a single-tool
 manifest omits it the repo's sole executable project is auto-detected (Go-style).
 `name` is derived from the project's assembly name when omitted. A multi-tool
-manifest cannot auto-detect, so every entry must name a `project`:
+manifest cannot auto-detect, so every entry must name a source. An entry names
+exactly one of three:
+
+| Source | Means | Optional |
+| --- | --- | --- |
+| `project` | a repo-relative `.csproj` or file-based app (`.cs`) | |
+| `package` | a NuGet package id | `version` |
+| `repository` | `owner/repo` on GitHub | `ref` |
 
 ```json
 {
@@ -166,18 +173,28 @@ manifest cannot auto-detect, so every entry must name a `project`:
   "name": "my-toolset",
   "tools": [
     { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
-    { "name": "tool-b", "project": "src/tool-b/tool-b.csproj" }
+    { "package": "dotnet-runtimeinfo" },
+    { "repository": "richlander/dotnet-inspect", "ref": "v0.16.0" }
   ]
 }
 ```
 
-This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted
-to build-from-source: the entries reference projects in the repo (the "local"
-flavor) rather than NuGet package ids. Installing from the repo
-(`--github` or `--repo`) builds and installs every entry, recording per-tool
-provenance so each updates independently. Installation stops at the first
-failure and leaves already-installed tools in place. An explicit `--project`
-overrides the toolset.
+This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted to
+build-from-source: `project` is the "local" flavor v3 has no need for, since a
+published bundle can only reference packages. Supporting all three in one array
+is what lets a manifest describe an environment rather than just this repo's
+output.
+
+Installing from the repo (`--github` or `--repo`) installs every entry,
+recording per-tool provenance so each updates from its **own** source, not from
+the repo that listed it. Every entry is resolved before any is installed, so a
+manifest error fails the whole set rather than leaving it half-applied; a
+failure during installation still stops at that point and leaves the tools
+already installed in place. An explicit `--project` overrides the toolset.
+
+Because an entry can name another repo, and that repo can advertise a manifest
+of its own, resolution is recursive. Repos being installed are tracked so two
+that reference each other fail with a cycle error rather than cloning forever.
 
 The legacy `exe`, `project`, and `bundle` fields remain readable and are
 normalized onto the `tools` array, so existing manifests keep working.

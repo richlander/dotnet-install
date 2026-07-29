@@ -62,7 +62,7 @@ static class UpdateCommand
                         Console.WriteLine($"{tool.Name}: pinned to {refInfo}, skipping (reinstall to change versions)");
                         break;
                     }
-                    if (UpdateGitHub(tool, source, installDir) != 0)
+                    if (await UpdateGitHubAsync(tool, source, installDir) != 0)
                         failures++;
                     break;
 
@@ -134,7 +134,7 @@ static class UpdateCommand
 
     // ---- GitHub update ----
 
-    static int UpdateGitHub(ToolInfo tool, InstallSource source, string installDir)
+    static async Task<int> UpdateGitHubAsync(ToolInfo tool, InstallSource source, string installDir)
     {
         string repository = source.Repository!;
         string? gitRef = source.Ref;
@@ -162,18 +162,18 @@ static class UpdateCommand
             repoDir = GitSource.RepoCacheDirForGitHub(owner, repo);
         }
 
-        int Reinstall()
+        async Task<int> Reinstall()
         {
             if (isUrl)
-                return GitSource.InstallFromUrl(repository, installDir, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
+                return await GitSource.InstallFromUrlAsync(repository, installDir, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
             string spec = gitRef is not null ? $"{repository}@{gitRef}" : repository;
-            return GitSource.InstallFromGit(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
+            return await GitSource.InstallFromGitAsync(spec, installDir, source.Ssh, branch: gitRef, tag: null, rev: null, source.Project, quiet: true, requireAdvertised: false, commandName: tool.Name);
         }
 
         if (!Directory.Exists(Path.Combine(repoDir, ".git")))
         {
             Console.WriteLine("not cached, reinstalling");
-            return Reinstall();
+            return await Reinstall();
         }
 
         // Fetch latest
@@ -209,7 +209,7 @@ static class UpdateCommand
         string shortLatest = latestCommit.Length >= 7 ? latestCommit[..7] : latestCommit;
         Console.WriteLine($"{shortCommit} -> {shortLatest}");
 
-        return Reinstall();
+        return await Reinstall();
     }
 
     // ---- Local update ----

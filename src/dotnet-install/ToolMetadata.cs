@@ -354,22 +354,67 @@ class BundleEntry
 
 /// <summary>
 /// A single tool a manifest describes. Modeled on Cargo's <c>[[bin]]</c> target:
-/// <c>name</c> is the command placed on PATH (Cargo's <c>name</c>), and
-/// <c>project</c> is the repo-relative source to build (Cargo's <c>path</c>).
-/// Both are optional: <c>project</c> is present only in source scenarios, and
-/// <c>name</c> is derived from the project's assembly name when omitted.
+/// <c>name</c> is the command placed on PATH (Cargo's <c>name</c>), and the entry
+/// names exactly one source to install it from.
+///
+/// <list type="bullet">
+///   <item><c>project</c> — a repo-relative <c>.csproj</c> or file-based app to
+///   build from this repo's source (Cargo's <c>path</c>).</item>
+///   <item><c>package</c> — a NuGet package, optionally pinned with
+///   <c>version</c>.</item>
+///   <item><c>repository</c> — another git repo (<c>owner/repo</c> or a URL),
+///   optionally pinned with <c>ref</c>.</item>
+/// </list>
+///
+/// A manifest may mix all three, so a repo can advertise its own tools alongside
+/// the third-party ones its toolset depends on. <c>name</c> is optional: for a
+/// project it defaults to the assembly name, and for a package or repository the
+/// source declares its own command name.
 /// </summary>
 class Tool
 {
-    /// <summary>Command name on PATH. Derived from the assembly name when omitted.</summary>
+    /// <summary>Command name on PATH. Derived from the source when omitted.</summary>
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; set; }
 
-    /// <summary>Repo-relative project (or file-based app) to build. Source-only.</summary>
+    /// <summary>Repo-relative project (or file-based app) to build.</summary>
     [JsonPropertyName("project")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Project { get; set; }
+
+    /// <summary>NuGet package id to install.</summary>
+    [JsonPropertyName("package")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Package { get; set; }
+
+    /// <summary>Version for <see cref="Package"/>. Latest when omitted.</summary>
+    [JsonPropertyName("version")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Version { get; set; }
+
+    /// <summary>Another git repo to build: <c>owner/repo</c> or a git URL.</summary>
+    [JsonPropertyName("repository")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Repository { get; set; }
+
+    /// <summary>Branch, tag, or commit for <see cref="Repository"/>.</summary>
+    [JsonPropertyName("ref")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Ref { get; set; }
+
+    /// <summary>
+    /// The sources this entry names. Exactly one is valid; the count is what
+    /// distinguishes "nothing specified" from "ambiguous" in error reporting.
+    /// </summary>
+    internal string[] DeclaredSources()
+    {
+        var declared = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(Project)) declared.Add("project");
+        if (!string.IsNullOrWhiteSpace(Package)) declared.Add("package");
+        if (!string.IsNullOrWhiteSpace(Repository)) declared.Add("repository");
+        return [.. declared];
+    }
 }
 
 [JsonSerializable(typeof(ToolManifest))]

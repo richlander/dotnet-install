@@ -66,6 +66,18 @@ Use `-o <dir>` for a custom output location, or `--local-bin` for
 `--github` or `--repo`, `--project` specifies a sub-path
 within the repository. `--git` is a deprecated alias for `--repo`.
 
+## Repo manifests
+
+A repo advertises its toolset in `.dotnet-install/.dotnet-install.json`.
+Each entry in `tools` names exactly one source: a repo-relative
+`project` (`.csproj` or `.cs` app), a NuGet `package` (with optional
+`version`), or another `repository` (`owner/repo`, with optional
+`ref`). They can be mixed, so a manifest can describe a whole
+environment rather than just this repo's output.
+
+Every entry is validated before anything installs. Each tool records
+its own source, so `update` pulls it from where it came from.
+
 ## Git ref options
 
 | Flag         | Pinned | Example                         |

@@ -47,7 +47,7 @@ static class InstallAction
             if (!CheckPrereqs(git: true, dotnet: true))
                 return 1;
 
-            return Report(GitSource.InstallFromGit(githubSpec, installDir, useSsh, branch, tag, rev, projectPath, requireSourceLink));
+            return Report(await GitSource.InstallFromGitAsync(githubSpec, installDir, useSsh, branch, tag, rev, projectPath, requireSourceLink));
         }
 
         // --repo: git URL (clone) or local repo path (built in place). Requires an
@@ -59,13 +59,13 @@ static class InstallAction
                 if (!CheckPrereqs(dotnet: true))
                     return 1;
 
-                return Report(InstallFromRepo(repoSpec, installDir, projectPath, requireSourceLink));
+                return Report(await InstallFromRepoAsync(repoSpec, installDir, projectPath, requireSourceLink));
             }
 
             if (!CheckPrereqs(git: true, dotnet: true))
                 return 1;
 
-            return Report(GitSource.InstallFromUrl(repoSpec, installDir, branch, tag, rev, projectPath, requireSourceLink));
+            return Report(await GitSource.InstallFromUrlAsync(repoSpec, installDir, branch, tag, rev, projectPath, requireSourceLink));
         }
 
         // --project (standalone): explicit project path.
@@ -140,7 +140,7 @@ static class InstallAction
     /// A local repo path passed to <c>--repo</c>: built in place. Requires an advertised
     /// manifest (bundle or project) unless <c>--project</c> is given.
     /// </summary>
-    static int InstallFromRepo(string dir, string installDir, string? projectOverride, bool requireSourceLink)
+    static async Task<int> InstallFromRepoAsync(string dir, string installDir, string? projectOverride, bool requireSourceLink)
     {
         if (projectOverride is not null)
         {
@@ -168,7 +168,7 @@ static class InstallAction
 
         string fullDir = Path.GetFullPath(dir);
         var source = new InstallSource { Type = "local", Commit = GitCommit(fullDir) };
-        return BundleInstaller.Install(fullDir, tools, installDir, source, requireSourceLink, update: config!.Update);
+        return await BundleInstaller.InstallAsync(fullDir, tools, installDir, source, requireSourceLink, update: config!.Update);
     }
 
     static bool CheckPrereqs(bool git = false, bool dotnet = false, string? context = null)

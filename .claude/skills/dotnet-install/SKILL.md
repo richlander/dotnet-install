@@ -157,6 +157,23 @@ dotnet install --package dotnet-inspect
 dotnet install --package dotnet-inspect@0.16.0
 ```
 
+### Repo manifests (`--repo`)
+
+A repo advertises its toolset in
+`.dotnet-install/.dotnet-install.json`. Each entry in `tools`
+names exactly one source:
+
+| Source | Means | Optional |
+| --- | --- | --- |
+| `project` | repo-relative `.csproj` or `.cs` app | |
+| `package` | NuGet package id | `version` |
+| `repository` | `owner/repo` on GitHub | `ref` |
+
+All three can be mixed, so a manifest can describe a whole
+environment, not just what the repo builds. Each installed
+tool records its own source, so `update` pulls it from where
+it actually came from.
+
 ### Multiple tools at once
 
 Positional args can mix sources. When multiple args

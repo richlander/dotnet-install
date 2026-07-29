@@ -299,7 +299,7 @@ auto-detects the repo's sole executable, and `name` is derived from the
 assembly name when omitted.
 
 List several entries to advertise a set of tools — each must name its own
-`project`:
+source:
 
 ```json
 {
@@ -317,23 +317,40 @@ published as a v3 bundle package. It is a **source-build variant** of that
 format: v3's package-level fields (a RID index, or a bundle of package IDs)
 describe published packages and have no meaning here.
 
-Every entry builds something **in this repo**. A `project` is a repo-relative
-path to either a `.csproj` or a file-based app (`.cs`) — both work, and they
-can be mixed in one toolset:
+An entry names exactly one source. Alongside `project`, an entry may name a
+NuGet `package` or another `repository`, so a toolset can be assembled from
+more than what this repo builds:
+
+| Source | Means | Optional |
+| --- | --- | --- |
+| `project` | a repo-relative `.csproj` or file-based app (`.cs`) | |
+| `package` | a NuGet package id | `version` |
+| `repository` | `owner/repo` on GitHub | `ref` |
+
+All three can be mixed in one toolset:
 
 ```json
 {
   "version": 3,
+  "name": "my-toolset",
   "tools": [
     { "name": "hello-cs",   "project": "tools/hello-cs/hello-cs.csproj" },
-    { "name": "hello-file", "project": "tools/hello-file/hello-file.cs" }
+    { "name": "hello-file", "project": "tools/hello-file/hello-file.cs" },
+    { "package": "dotnet-runtimeinfo" },
+    { "repository": "richlander/dotnet-inspect", "ref": "v0.16.0" }
   ]
 }
 ```
 
-A manifest cannot pull in a NuGet package or another GitHub repo. It advertises
-what this repo produces, and nothing else — so a `package` or `repository`
-field on an entry is ignored, and the entry then fails for having no `project`.
+That makes a manifest a way to describe a whole environment, not just this
+repo's output — a team can put the tools everyone needs in one file and have
+new machines catch up with `dotnet-install --repo .`.
+
+Each tool still records where **it** came from, so `update` pulls each one from
+its own source rather than from the repo that listed it. The whole manifest is
+validated before anything is installed, so a typo in the last entry can't leave
+you with a half-installed toolset.
+
 The legacy `exe`, `project`, and `bundle` fields still work.
 
 Once a repo advertises its toolset, `--repo` builds and installs the whole set:

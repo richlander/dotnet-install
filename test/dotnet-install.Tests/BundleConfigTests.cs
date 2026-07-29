@@ -157,14 +157,14 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
-    public void Install_FailsAndStops_OnMissingProject()
+    public async Task Install_FailsAndStops_OnMissingProject()
     {
         var tools = new List<Tool>
         {
             new() { Project = "does-not-exist.csproj" }
         };
 
-        int result = BundleInstaller.Install(
+        int result = await BundleInstaller.InstallAsync(
             _tempDir, tools, _tempDir,
             new InstallSource { Type = "local" },
             quiet: true);
@@ -173,9 +173,9 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
-    public void Install_FailsOnEmptyToolset()
+    public async Task Install_FailsOnEmptyToolset()
     {
-        int result = BundleInstaller.Install(
+        int result = await BundleInstaller.InstallAsync(
             _tempDir, [], _tempDir,
             new InstallSource { Type = "local" },
             quiet: true);
@@ -184,7 +184,7 @@ public class BundleConfigTests : IDisposable
     }
 
     [Fact]
-    public void Install_FailsOnMultiToolEntryWithoutProject()
+    public async Task Install_FailsOnMultiToolEntryWithoutProject()
     {
         // A multi-tool manifest cannot auto-detect; every entry must name a project.
         var tools = new List<Tool>
@@ -193,7 +193,7 @@ public class BundleConfigTests : IDisposable
             new() { Name = "b", Project = null }
         };
 
-        int result = BundleInstaller.Install(
+        int result = await BundleInstaller.InstallAsync(
             _tempDir, tools, _tempDir,
             new InstallSource { Type = "local" },
             quiet: true);

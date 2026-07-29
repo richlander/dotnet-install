@@ -25,7 +25,7 @@ static class GitSource
         Path.Combine(CacheBase, owner, repo, "repo");
 
 
-    public static int InstallFromUrl(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
+    public static async Task<int> InstallFromUrlAsync(string url, string installDir, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
     {
         string? gitRef = rev ?? tag ?? branch;
         bool pinned = rev is not null || tag is not null;
@@ -109,7 +109,7 @@ static class GitSource
                 Commit = commitSha,
                 Pinned = pinned
             };
-            return BundleInstaller.Install(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
+            return await BundleInstaller.InstallAsync(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
         }
 
         if (requireAdvertised && !RequireAdvertised(config, projectOverride))
@@ -138,7 +138,7 @@ static class GitSource
         return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: recordedUpdate, commandName: commandName);
     }
 
-    public static int InstallFromGit(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
+    public static async Task<int> InstallFromGitAsync(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
     {
         // Parse owner/repo[@ref]
         int atIndex = spec.IndexOf('@');
@@ -253,7 +253,7 @@ static class GitSource
                 Ssh = useSsh,
                 Pinned = pinned
             };
-            return BundleInstaller.Install(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
+            return await BundleInstaller.InstallAsync(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
         }
 
         // Discover project
