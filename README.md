@@ -152,11 +152,21 @@ Use `-o <dir>` to install somewhere else, or `--local-bin` for `~/.local/bin`.
 
 ### NuGet packages
 
-`--package` installs from NuGet. Packages using the [DotNetCliTool v3][v3]
-layout are supported: a pointer package resolves to the right RID-specific
-payload for your platform, and a bundle package installs its members together.
-As always, only native single-file payloads are installed — a package that
-resolves to a managed `any` fallback points you at `dotnet tool install`.
+`--package` installs from NuGet. What matters is the **payload shape**, not
+the package format: dotnet-install places native single-file executables, so
+a managed tool is rejected with a pointer at `dotnet tool install -g`.
+
+Within that rule, both current package layouts work:
+
+| Layout | Supported | Notes |
+| --- | --- | --- |
+| v1 (`DotNetCliToolReference`) | no | Project-scoped and always managed |
+| v2 (`DotnetToolSettings.xml`) | yes, if native | Includes RID-specific pointer packages |
+| v3 (`tools/manifest.json`) | yes, if native | RID index, bundle, and payload manifests |
+
+For [DotNetCliTool v3][v3] specifically, a pointer package resolves to the
+right RID-specific payload for your platform, and a bundle package installs
+its members together.
 
 [v3]: https://github.com/dotnet/designs/blob/main/accepted/2026/dotnet-cli-tools-v3.md
 
@@ -296,8 +306,28 @@ List several entries to advertise a set of tools — each must name its own
 ```
 
 The shape mirrors the DotNetCliTool v3 manifest, so the same toolset can be
-published as a v3 bundle package. The legacy `exe`, `project`, and `bundle`
-fields still work.
+published as a v3 bundle package. It is a **source-build variant** of that
+format: v3's package-level fields (a RID index, or a bundle of package IDs)
+describe published packages and have no meaning here.
+
+Every entry builds something **in this repo**. A `project` is a repo-relative
+path to either a `.csproj` or a file-based app (`.cs`) — both work, and they
+can be mixed in one toolset:
+
+```json
+{
+  "version": 3,
+  "tools": [
+    { "name": "hello-cs",   "project": "tools/hello-cs/hello-cs.csproj" },
+    { "name": "hello-file", "project": "tools/hello-file/hello-file.cs" }
+  ]
+}
+```
+
+A manifest cannot pull in a NuGet package or another GitHub repo. It advertises
+what this repo produces, and nothing else — so a `package` or `repository`
+field on an entry is ignored, and the entry then fails for having no `project`.
+The legacy `exe`, `project`, and `bundle` fields still work.
 
 Once a repo advertises its toolset, `--repo` builds and installs the whole set:
 
