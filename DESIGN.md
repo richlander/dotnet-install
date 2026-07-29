@@ -164,7 +164,7 @@ exactly one of three:
 | --- | --- | --- |
 | `project` | a repo-relative `.csproj` or file-based app (`.cs`) | |
 | `package` | a NuGet package id | `version` |
-| `repository` | `owner/repo` on GitHub | `ref` |
+| `repository` | an object: `url` (`owner/repo`) plus one of `branch`, `tag`, or `rev` | |
 
 ```json
 {
@@ -173,10 +173,17 @@ exactly one of three:
   "tools": [
     { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
     { "package": "dotnet-runtimeinfo" },
-    { "repository": "richlander/dotnet-inspect", "ref": "v0.16.0" }
+    { "repository": { "url": "richlander/dotnet-inspect", "tag": "v0.16.0" } }
   ]
 }
 ```
+
+A `repository` entry must say which ref it takes, and the kind it names is what
+decides whether the tool keeps moving. A `branch` is tracked, so `update` pulls
+new commits; a `tag` or `rev` pins, and `update` leaves it alone. There is no
+form that omits the ref: an entry that quietly followed the default branch would
+read the same on the day it was written and a year later, when it means
+something else.
 
 This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted to
 build-from-source: `project` is the "local" flavor v3 has no need for, since a

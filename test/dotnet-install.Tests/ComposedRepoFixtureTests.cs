@@ -98,6 +98,7 @@ public class ComposedRepoFixtureTests
 
         var repository = Assert.IsType<BundleInstaller.RepositoryEntry>(entry);
         Assert.Equal("richlander/dotnet-inspect", repository.Repository);
+        Assert.Equal("main", repository.Branch);
     }
 
     [Fact]

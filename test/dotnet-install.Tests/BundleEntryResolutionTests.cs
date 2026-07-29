@@ -90,28 +90,70 @@ public class BundleEntryResolutionTests : IDisposable
     [Fact]
     public void Repository_ResolvesToRepositoryEntry()
     {
-        var tool = new Tool { Repository = "richlander/dotnet-inspect" };
+        var tool = new Tool
+        {
+            Repository = new RepositorySpec { Url = "richlander/dotnet-inspect", Branch = "main" },
+        };
 
         var entry = Assert.IsType<BundleInstaller.RepositoryEntry>(
             BundleInstaller.Resolve(tool, _root, toolCount: 2));
 
-        Assert.Equal("richlander/dotnet-inspect", entry.Spec);
+        Assert.Equal("richlander/dotnet-inspect", entry.Repository);
+        Assert.Equal("main", entry.Branch);
     }
 
     /// <summary>
-    /// A manifest ref may be a branch, tag, or commit, so it goes through the
-    /// owner/repo@ref spec that resolves any of the three rather than being
-    /// asserted to be one kind.
+    /// The three ref kinds stay apart all the way to the installer. Folding them
+    /// into one field is what made every manifest ref pin, branches included.
     /// </summary>
-    [Fact]
-    public void Repository_RefRidesInTheSpec()
+    [Theory]
+    [InlineData("branch", "main")]
+    [InlineData("tag", "v0.16.0")]
+    [InlineData("rev", "4976db9")]
+    public void Repository_KeepsRefKindsApart(string kind, string value)
     {
-        var tool = new Tool { Repository = "richlander/dotnet-inspect", Ref = "v0.16.0" };
+        var spec = new RepositorySpec { Url = "richlander/dotnet-inspect" };
+        switch (kind)
+        {
+            case "branch": spec.Branch = value; break;
+            case "tag": spec.Tag = value; break;
+            default: spec.Rev = value; break;
+        }
 
         var entry = Assert.IsType<BundleInstaller.RepositoryEntry>(
-            BundleInstaller.Resolve(tool, _root, toolCount: 2));
+            BundleInstaller.Resolve(new Tool { Repository = spec }, _root, toolCount: 2));
 
-        Assert.Equal("richlander/dotnet-inspect@v0.16.0", entry.Spec);
+        Assert.Equal(kind == "branch" ? value : null, entry.Branch);
+        Assert.Equal(kind == "tag" ? value : null, entry.Tag);
+        Assert.Equal(kind == "rev" ? value : null, entry.Rev);
+    }
+
+    /// <summary>
+    /// A repo entry has to say which ref it takes. Defaulting to the default branch
+    /// would make the entry mean something different over time while reading the same.
+    /// </summary>
+    [Fact]
+    public void Repository_WithoutRefFails()
+    {
+        var tool = new Tool { Repository = new RepositorySpec { Url = "richlander/dotnet-inspect" } };
+
+        Assert.Null(BundleInstaller.Resolve(tool, _root, toolCount: 2));
+    }
+
+    [Fact]
+    public void Repository_WithMultipleRefsFails()
+    {
+        var tool = new Tool
+        {
+            Repository = new RepositorySpec
+            {
+                Url = "richlander/dotnet-inspect",
+                Branch = "main",
+                Tag = "v0.16.0",
+            },
+        };
+
+        Assert.Null(BundleInstaller.Resolve(tool, _root, toolCount: 2));
     }
 
     [Fact]

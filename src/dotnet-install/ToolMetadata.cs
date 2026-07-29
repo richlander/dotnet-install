@@ -381,15 +381,10 @@ class Tool
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Version { get; set; }
 
-    /// <summary>Another git repo to build: <c>owner/repo</c> or a git URL.</summary>
+    /// <summary>Another git repo to build, with the ref it is taken from.</summary>
     [JsonPropertyName("repository")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Repository { get; set; }
-
-    /// <summary>Branch, tag, or commit for <see cref="Repository"/>.</summary>
-    [JsonPropertyName("ref")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Ref { get; set; }
+    public RepositorySpec? Repository { get; set; }
 
     /// <summary>
     /// The sources this entry names. Exactly one is valid; the count is what
@@ -400,7 +395,59 @@ class Tool
         var declared = new List<string>(3);
         if (!string.IsNullOrWhiteSpace(Project)) declared.Add("project");
         if (!string.IsNullOrWhiteSpace(Package)) declared.Add("package");
-        if (!string.IsNullOrWhiteSpace(Repository)) declared.Add("repository");
+        if (!string.IsNullOrWhiteSpace(Repository?.Url)) declared.Add("repository");
+        return [.. declared];
+    }
+}
+
+/// <summary>
+/// A git repo a manifest entry names:
+///
+/// <code>
+/// "repository": { "url": "owner/repo", "branch": "main" }
+/// </code>
+///
+/// Exactly one of <c>branch</c>, <c>tag</c>, or <c>rev</c> is required, matching
+/// the <c>--branch</c>, <c>--tag</c>, and <c>--rev</c> options. The distinction is
+/// not cosmetic: a branch is tracked and keeps updating, while a tag or commit
+/// pins the install.
+///
+/// There is no shorthand that omits the ref. Silently following whatever the
+/// default branch points at today is exactly what makes a manifest unauditable —
+/// naming <c>branch</c> still floats, but it says so out loud.
+/// </summary>
+class RepositorySpec
+{
+    /// <summary><c>owner/repo</c> on GitHub, or a git URL.</summary>
+    [JsonPropertyName("url")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Url { get; set; }
+
+    /// <summary>Branch to track. Updatable — <c>update</c> follows it.</summary>
+    [JsonPropertyName("branch")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Branch { get; set; }
+
+    /// <summary>Tag to install. Pinned.</summary>
+    [JsonPropertyName("tag")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Tag { get; set; }
+
+    /// <summary>Commit SHA to install. Pinned.</summary>
+    [JsonPropertyName("rev")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Rev { get; set; }
+
+    /// <summary>
+    /// The refs this spec names. Exactly one is valid, and zero means "track the
+    /// default branch"; the count is what separates those from an ambiguous spec.
+    /// </summary>
+    internal string[] DeclaredRefs()
+    {
+        var declared = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(Branch)) declared.Add("branch");
+        if (!string.IsNullOrWhiteSpace(Tag)) declared.Add("tag");
+        if (!string.IsNullOrWhiteSpace(Rev)) declared.Add("rev");
         return [.. declared];
     }
 }

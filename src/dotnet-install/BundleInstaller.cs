@@ -28,17 +28,17 @@ static class BundleInstaller
         public override string Display => $"{Spec} (nuget)";
     }
 
-    /// <summary>A tool built from another git repo.</summary>
-    internal sealed record RepositoryEntry(string? Name, string Repository, string? Ref) : Entry(Name)
+    /// <summary>A tool built from another git repo at a named branch, tag, or commit.</summary>
+    internal sealed record RepositoryEntry(
+        string? Name, string Repository, string? Branch, string? Tag, string? Rev) : Entry(Name)
     {
         /// <summary>
-        /// The owner/repo[@ref] spec GitSource parses. A manifest ref may name a
-        /// branch, tag, or commit, so it goes through the spec string, which resolves
-        /// any of the three (and pins the install) rather than asserting one kind.
+        /// The ref, whichever kind was named. For display only — the kinds are kept
+        /// apart when installing, because a branch is tracked and the other two pin.
         /// </summary>
-        public string Spec => Ref is null ? Repository : $"{Repository}@{Ref}";
+        public string Ref => Branch ?? Tag ?? Rev ?? "";
 
-        public override string Display => $"{Spec} (repo)";
+        public override string Display => $"{Repository}@{Ref} (repo)";
     }
 
     /// <summary>
@@ -142,8 +142,12 @@ static class BundleInstaller
 
         try
         {
+            // Pass the ref as the kind it was declared as rather than folding it into
+            // the spec string. Everything in the spec string counts as pinned, which
+            // would make "branch" mean "the commit that branch pointed at once".
             return await GitSource.InstallFromGitAsync(
-                entry.Spec, installDir, useSsh: false, branch: null, tag: null, rev: null,
+                entry.Repository, installDir, useSsh: false,
+                entry.Branch, entry.Tag, entry.Rev,
                 projectOverride: null, requireSourceLink, quiet,
                 requireAdvertised: false, commandName: entry.Name);
         }
@@ -193,8 +197,29 @@ static class BundleInstaller
             return new PackageEntry(tool.Name, spec);
         }
 
-        if (tool.Repository is { Length: > 0 } repository)
-            return new RepositoryEntry(tool.Name, repository, tool.Ref);
+        if (tool.Repository is { Url: { Length: > 0 } url } repository)
+        {
+            string[] refs = repository.DeclaredRefs();
+
+            if (refs.Length > 1)
+            {
+                Console.Error.WriteLine(
+                    $"error: tool entry {Describe(tool)} names more than one ref ({string.Join(", ", refs)}); pick one.");
+                return null;
+            }
+
+            // Requiring a ref is what keeps a manifest auditable: without one the
+            // entry would quietly track whatever the default branch points at.
+            if (refs.Length == 0)
+            {
+                Console.Error.WriteLine(
+                    $"error: tool entry {Describe(tool)} names no ref; give its \"repository\" a \"branch\", \"tag\", or \"rev\".");
+                return null;
+            }
+
+            return new RepositoryEntry(
+                tool.Name, url, repository.Branch, repository.Tag, repository.Rev);
+        }
 
         string full = Path.GetFullPath(Path.Combine(rootDir, tool.Project!));
         if (!File.Exists(full))

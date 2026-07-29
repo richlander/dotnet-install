@@ -329,7 +329,7 @@ more than what this repo builds:
 | --- | --- | --- |
 | `project` | a repo-relative `.csproj` or file-based app (`.cs`) | |
 | `package` | a NuGet package id | `version` |
-| `repository` | `owner/repo` on GitHub | `ref` |
+| `repository` | an object: `url` (`owner/repo`) plus one of `branch`, `tag`, or `rev` | |
 
 All three can be mixed in one toolset:
 
@@ -341,10 +341,17 @@ All three can be mixed in one toolset:
     { "name": "hello-cs",   "project": "tools/hello-cs/hello-cs.csproj" },
     { "name": "hello-file", "project": "tools/hello-file/hello-file.cs" },
     { "package": "dotnet-runtimeinfo" },
-    { "repository": "richlander/dotnet-inspect", "ref": "v0.16.0" }
+    { "repository": { "url": "richlander/dotnet-inspect", "tag": "v0.16.0" } }
   ]
 }
 ```
+
+A `repository` entry must say which ref it takes, and the kind it names is what
+decides whether the tool keeps moving. A `branch` is tracked, so `update` pulls
+new commits; a `tag` or `rev` pins, and `update` leaves it alone. There is no
+form that omits the ref: an entry that quietly followed the default branch would
+read the same on the day it was written and a year later, when it means
+something else.
 
 A working version of this manifest is committed as a test fixture —
 [`test/fixtures/composed-repo`](test/fixtures/composed-repo) — with tests that
