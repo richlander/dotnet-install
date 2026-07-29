@@ -69,14 +69,13 @@ public class BundleConfigTests : IDisposable
     public void Read_ParsesColocatedFile()
     {
         WriteColocated("""
-        { "exe": "solo-tool", "update": { "type": "nuget", "package": "solo-tool" } }
+        { "exe": "solo-tool" }
         """);
 
         var config = ToolConfig.Read(_tempDir);
 
         Assert.NotNull(config);
         Assert.Equal("solo-tool", config.Exe);
-        Assert.Equal("nuget", config.Update?.Type);
     }
 
     [Fact]
@@ -93,8 +92,7 @@ public class BundleConfigTests : IDisposable
         WriteRepoManifest("""
         {
           "exe": "mytool",
-          "project": "src/mytool/mytool.csproj",
-          "update": { "type": "nuget", "package": "mytool" }
+          "project": "src/mytool/mytool.csproj"
         }
         """);
 
@@ -104,26 +102,6 @@ public class BundleConfigTests : IDisposable
         Assert.Equal("mytool", config.Exe);
         Assert.Equal("src/mytool/mytool.csproj", config.Project);
         Assert.Null(config.Bundle);
-        Assert.Equal("nuget", config.Update?.Type);
-        Assert.Equal("mytool", config.Update?.Package);
-    }
-
-    [Fact]
-    public void ReadFromRepo_CoexistsWithUpdateChannel()
-    {
-        WriteRepoManifest("""
-        {
-          "update": { "type": "nuget", "package": "solo-tool" },
-          "bundle": [ { "project": "app.csproj" } ]
-        }
-        """);
-
-        var config = ToolConfig.ReadFromRepo(_tempDir);
-
-        Assert.NotNull(config);
-        Assert.Equal("nuget", config.Update?.Type);
-        Assert.Single(config.Bundle!);
-        Assert.Equal("app.csproj", config.Bundle![0].Project);
     }
 
     [Fact]
@@ -136,8 +114,7 @@ public class BundleConfigTests : IDisposable
           "tools": [
             { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
             { "name": "tool-b", "project": "src/tool-b/tool-b.csproj" }
-          ],
-          "update": { "type": "nuget", "package": "my-toolset" }
+          ]
         }
         """);
 

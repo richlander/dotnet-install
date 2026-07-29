@@ -168,7 +168,7 @@ static class InstallAction
 
         string fullDir = Path.GetFullPath(dir);
         var source = new InstallSource { Type = "local", Commit = GitCommit(fullDir) };
-        return await BundleInstaller.InstallAsync(fullDir, tools, installDir, source, requireSourceLink, update: config!.Update);
+        return await BundleInstaller.InstallAsync(fullDir, tools, installDir, source, requireSourceLink);
     }
 
     static bool CheckPrereqs(bool git = false, bool dotnet = false, string? context = null)
@@ -240,14 +240,14 @@ static class InstallAction
                 Console.Error.WriteLine($"error: project from {ToolConfig.RepoDirName}/{ToolConfig.FileName} not found: {toolProject}");
                 return 1;
             }
-            return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink, update: repoConfig.Update, commandName: tools[0].Name);
+            return Installer.Install(projectFile, installDir, CreateLocalSource(projectFile), requireSourceLink, commandName: tools[0].Name);
         }
 
         string? found = FindProjectFile(path);
         if (found is null)
             return null;
 
-        return Installer.Install(found, installDir, CreateLocalSource(found), requireSourceLink, update: repoConfig?.Update);
+        return Installer.Install(found, installDir, CreateLocalSource(found), requireSourceLink);
     }
 
     static InstallSource CreateLocalSource(string projectFile)

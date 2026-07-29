@@ -76,7 +76,7 @@ try {
 
     # Write update metadata sidecar: a flat .tool.<name>.json next to the binary,
     # matching what the tool itself writes.
-    $metaJson = "{`"source`":{`"type`":`"github-release`",`"repository`":`"richlander/dotnet-install`",`"version`":`"$version`"},`"update`":{`"type`":`"nuget`",`"package`":`"dotnet-install`",`"version`":`"$version`"}}"
+    $metaJson = "{`"source`":{`"type`":`"github-release`",`"repository`":`"richlander/dotnet-install`",`"version`":`"$version`"}}"
     Set-Content -Path (Join-Path $installDir ".tool.dotnet-install.json") -Value $metaJson -NoNewline
 
     Write-Host "dotnet-install: installed to $dest"

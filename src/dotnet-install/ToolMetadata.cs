@@ -148,13 +148,6 @@ class ToolManifest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public InstallSource? Source { get; set; }
 
-    /// <summary>
-    /// Preferred update channel, overrides Source for updates.
-    /// Set by repo config (.dotnet-install.json) or install scripts.
-    /// </summary>
-    [JsonPropertyName("update")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public InstallSource? Update { get; set; }
 }
 
 /// <summary>
@@ -256,11 +249,6 @@ class ToolConfig
     [JsonPropertyName("project")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Project { get; set; }
-
-    /// <summary>Preferred update channel (e.g., NuGet package).</summary>
-    [JsonPropertyName("update")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public InstallSource? Update { get; set; }
 
     /// <summary>
     /// Toolset the repo advertises. When present and installing from the repo

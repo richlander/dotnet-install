@@ -149,8 +149,7 @@ one-tool repo:
   "name": "my-tool",
   "tools": [
     { "name": "my-tool", "project": "src/my-tool/my-tool.csproj" }
-  ],
-  "update": { "type": "nuget", "package": "my-tool" }
+  ]
 }
 ```
 

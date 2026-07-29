@@ -42,24 +42,6 @@ public class ToolMetadataTests : IDisposable
     }
 
     [Fact]
-    public void RoundTrip_PreservesUpdateChannel()
-    {
-        var original = new ToolManifest
-        {
-            Source = new InstallSource { Type = "github", Repository = "owner/repo" },
-            Update = new InstallSource { Type = "nuget", Package = "mytool", Version = "2.0.0" }
-        };
-
-        ToolMetadata.Write(_tempDir, "mytool", original);
-        var loaded = ToolMetadata.Read(_tempDir, "mytool");
-
-        Assert.NotNull(loaded);
-        Assert.Equal("github", loaded.Source?.Type);
-        Assert.Equal("nuget", loaded.Update?.Type);
-        Assert.Equal("2.0.0", loaded.Update?.Version);
-    }
-
-    [Fact]
     public void Read_ReturnNull_WhenFileDoesNotExist()
     {
         string emptyDir = Path.Combine(_tempDir, "empty");

@@ -62,8 +62,7 @@ static class BundleInstaller
         string installDir,
         InstallSource baseSource,
         bool requireSourceLink = false,
-        bool quiet = false,
-        InstallSource? update = null)
+        bool quiet = false)
     {
         var resolved = new List<Entry>();
 
@@ -85,11 +84,6 @@ static class BundleInstaller
         if (!quiet && bundle)
             Console.WriteLine($"Installing bundle of {resolved.Count} tools...");
 
-        // A repo-level update channel (e.g. a single NuGet package) describes one
-        // advertised tool. For a multi-tool bundle it cannot map to any single
-        // member, so members update from their own source instead.
-        InstallSource? toolUpdate = bundle ? null : update;
-
         int installed = 0;
         foreach (var entry in resolved)
         {
@@ -103,7 +97,7 @@ static class BundleInstaller
             {
                 ProjectEntry p => Installer.Install(
                     p.Full, installDir, WithProject(baseSource, p.Relative, p.Full),
-                    requireSourceLink, quiet, update: toolUpdate, commandName: p.Name),
+                    requireSourceLink, quiet, commandName: p.Name),
 
                 PackageEntry k => await Installer.InstallPackageAsync(
                     k.Spec, installDir, requireSourceLink, quiet),

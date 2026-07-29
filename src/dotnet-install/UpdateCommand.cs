@@ -44,8 +44,9 @@ static class UpdateCommand
 
         foreach (var tool in tools)
         {
-            // Prefer update channel over install source (e.g., installed from GitHub, updates from NuGet)
-            var source = tool.Manifest.Update ?? tool.Manifest.Source!;
+            // A tool updates from where it came from. Every source type has its
+            // own updater, so there is never a reason to switch channels.
+            var source = tool.Manifest.Source!;
 
             switch (source.Type)
             {
@@ -92,7 +93,6 @@ static class UpdateCommand
     {
         string packageName = source.Package!;
 
-        // Use the best known installed version across source and update plan
         string installedVersion = GetInstalledVersion(tool) ?? "unknown";
 
         Console.Write($"{tool.Name} ({packageName} {installedVersion})... ");
@@ -116,18 +116,6 @@ static class UpdateCommand
         Console.WriteLine($"{installedVersion} -> {latestVersion}");
         int result = await Installer.InstallPackageAsync(
             $"{packageName}@{latestVersion}", installDir, quiet: true);
-
-        // Preserve the update plan in metadata (InstallPackageAsync wrote source only)
-        if (result == 0 && tool.Manifest.Update is not null)
-        {
-            var manifest = ToolMetadata.Read(installDir, tool.Name);
-            if (manifest is not null)
-            {
-                manifest.Update = tool.Manifest.Update;
-                manifest.Update.Version = latestVersion;
-                ToolMetadata.Write(installDir, tool.Name, manifest);
-            }
-        }
 
         return result;
     }
@@ -521,27 +509,11 @@ static class UpdateCommand
 
     // ---- Version helpers ----
 
-    /// <summary>
-    /// Returns the best known installed version by checking both Source and Update metadata.
-    /// </summary>
-    static string? GetInstalledVersion(ToolInfo tool)
-    {
-        string? sourceVer = tool.Manifest.Source?.Version;
-        string? updateVer = tool.Manifest.Update?.Version;
-
-        if (sourceVer is null) return updateVer;
-        if (updateVer is null) return sourceVer;
-
-        // Return the higher of the two
-        if (TryParseVersion(sourceVer, out var sv) && TryParseVersion(updateVer, out var uv))
-            return sv >= uv ? sourceVer : updateVer;
-
-        return sourceVer;
-    }
+    /// <summary>The installed version, as recorded by the source it came from.</summary>
+    static string? GetInstalledVersion(ToolInfo tool) => tool.Manifest.Source?.Version;
 
     /// <summary>
     /// Returns true only if latest is strictly newer than installed.
-    /// Prevents downgrades when switching update channels.
     /// </summary>
     static bool IsNewer(string latest, string installed)
     {

@@ -109,7 +109,7 @@ static class GitSource
                 Commit = commitSha,
                 Pinned = pinned
             };
-            return await BundleInstaller.InstallAsync(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
+            return await BundleInstaller.InstallAsync(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet);
         }
 
         if (requireAdvertised && !RequireAdvertised(config, projectOverride))
@@ -129,13 +129,9 @@ static class GitSource
             Pinned = pinned
         };
 
-        // A repo-level update channel describes a single advertised tool; suppress
-        // it when the repo advertises a bundle (a member reached here via its
-        // recorded project override updates from its git source instead).
-        InstallSource? recordedUpdate = (config?.GetTools().Count ?? 0) > 1 ? null : config?.Update;
         // Preserve the caller-supplied installed command name (e.g. an update
         // reinstalling under the tool's existing name) so it stays stable.
-        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: recordedUpdate, commandName: commandName);
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, commandName: commandName);
     }
 
     public static async Task<int> InstallFromGitAsync(string spec, string installDir, bool useSsh, string? branch, string? tag, string? rev, string? projectOverride, bool requireSourceLink = false, bool quiet = false, bool requireAdvertised = true, string? commandName = null)
@@ -236,7 +232,7 @@ static class GitSource
         // Capture commit SHA for provenance tracking
         string? commitSha = RunCapture("git", ["-C", repoDir, "rev-parse", "HEAD"])?.Trim();
 
-        // Read repo config (.dotnet-install.json) for advertised tools and update plan
+        // Read repo config (.dotnet-install.json) for the advertised toolset
         var config = ToolConfig.ReadFromRepo(repoDir);
 
         // A repo advertises its toolset via the "tools" array. When present and no
@@ -253,7 +249,7 @@ static class GitSource
                 Ssh = useSsh,
                 Pinned = pinned
             };
-            return await BundleInstaller.InstallAsync(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet, update: config?.Update);
+            return await BundleInstaller.InstallAsync(repoDir, tools, installDir, bundleSource, requireSourceLink, quiet);
         }
 
         // Discover project
@@ -275,13 +271,9 @@ static class GitSource
             Pinned = pinned
         };
 
-        // A repo-level update channel describes a single advertised tool; suppress
-        // it when the repo advertises a bundle (a member reached here via its
-        // recorded project override updates from its git source instead).
-        InstallSource? recordedUpdate = (config?.GetTools().Count ?? 0) > 1 ? null : config?.Update;
         // Preserve the caller-supplied installed command name (e.g. an update
         // reinstalling under the tool's existing name) so it stays stable.
-        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, update: recordedUpdate, commandName: commandName);
+        return Installer.Install(projectFile, installDir, source, requireSourceLink, quiet, commandName: commandName);
     }
 
     // ---- Project discovery ----

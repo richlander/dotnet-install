@@ -21,7 +21,7 @@ static class Installer
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
 
-    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false, InstallSource? update = null, string? commandName = null)
+    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false, string? commandName = null)
     {
         // 1. Evaluate the project to read properties before building
         var info = EvaluateProject(projectFile);
@@ -122,7 +122,7 @@ static class Installer
             {
                 InstallLayout.RemoveLegacyLauncher(installDir, installName);
                 InstallLayout.ResetMetadataDirectory(installDir, installName);
-                ToolMetadata.Write(installDir, installName, new ToolManifest { Source = source, Update = update });
+                ToolMetadata.Write(installDir, installName, new ToolManifest { Source = source });
             }
 
             if (!quiet)

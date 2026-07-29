@@ -61,7 +61,7 @@ main() {
 
     # Write update metadata sidecar: a flat .tool.<name>.json next to the binary,
     # matching what the tool itself writes.
-    printf '{"source":{"type":"github-release","repository":"richlander/dotnet-install","version":"%s"},"update":{"type":"nuget","package":"dotnet-install","version":"%s"}}' "$_version" "$_version" > "$INSTALL_DIR/.tool.dotnet-install.json"
+    printf '{"source":{"type":"github-release","repository":"richlander/dotnet-install","version":"%s"}}' "$_version" > "$INSTALL_DIR/.tool.dotnet-install.json"
 
     say "installed to ${INSTALL_DIR}/dotnet-install"
 
