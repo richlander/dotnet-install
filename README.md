@@ -51,7 +51,7 @@ For contributors or local development:
 
 Builds from the local source tree via `dotnet publish` (requires the .NET SDK).
 
-## Familiar from `cargo` and `go`
+## Familiar for `cargo` and `go` users
 
 If you install CLI tools with Rust or Go, you already know how this works.
 The gesture is the same in all three: **name a source, get a command on
