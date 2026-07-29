@@ -103,24 +103,28 @@ prebuilt native binary, so there's no compile step at all.
 ## Why not `dotnet tool install`?
 
 `dotnet tool install` requires the SDK and only installs from NuGet.
+dotnet-install can do more with less.
 
-dotnet-install goes further:
+### On machines without .NET
 
-- **No .NET required** — install and run Native AOT tools
-  without the SDK or runtime
-- **Uses the SDK if available** — build and install directly
-  from local projects and GitHub repos
-- **Update everything** — `dotnet-install update` checks all
-  installed tools at once, like `npm update -g`
+- **No SDK, no runtime** — install and run Native AOT tools from NuGet
+  packages and GitHub releases on a machine with no .NET on it
 - **Just run it** — installed tools are on PATH; no `dotnet run`
   needed to find the executable
-- **One gesture from source** — build and install in a single step, like
+- **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
+  not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
+- **Update everything** — `dotnet-install update` checks all
+  installed tools at once, like `npm update -g`
+
+### On machines with the .NET SDK
+
+- **Install from source** — build and install straight from a local
+  project or a GitHub repo, not just from a package
+- **One gesture** — build and install in a single step, like
   `cargo install`. The SDK has no publish-pack-install path: you
   `dotnet pack`, then install from a local feed
 - **Clean release build** — always does a publish-optimized build,
   just like `cargo install` and `go install`
-- **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
-  not `~/.dotnet/tools/.store/dotnet-inspect/0.7.2/...`
 
 ## Consuming tools
 
