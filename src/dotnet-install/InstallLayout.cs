@@ -48,16 +48,16 @@ static class InstallLayout
         IsLegacyManaged(installDir, toolName, entry) ? LegacyManagedType : SingleFileType;
 
     /// <summary>
-    /// Reset a tool's metadata directory so a (re)install or update over a legacy
-    /// managed layout leaves only fresh single-file metadata with no stale payload.
-    /// Callers write the new <c>.tool.json</c> into it afterward.
+    /// Purge a tool's legacy metadata directory so a (re)install or update over a
+    /// pre-redesign managed layout leaves no stale payload behind. Current installs
+    /// write a flat <c>.tool.&lt;name&gt;.json</c> sidecar instead, so the directory is
+    /// not recreated.
     /// </summary>
     internal static void ResetMetadataDirectory(string installDir, string toolName)
     {
         string metaDir = MetadataDirectory(installDir, toolName);
         if (Directory.Exists(metaDir))
             Directory.Delete(metaDir, recursive: true);
-        Directory.CreateDirectory(metaDir);
     }
 
     /// <summary>

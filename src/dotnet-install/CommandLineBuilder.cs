@@ -87,7 +87,7 @@ static class CommandLineBuilder
         };
         var repoOption = new Option<string?>("--repo")
         {
-            Description = "Clone/build a repo (URL or local path) and install globally",
+            Description = "Build a repo (git URL or local path) and install its advertised tools",
             HelpName = "url|path"
         };
         repoOption.Aliases.Add("--git");

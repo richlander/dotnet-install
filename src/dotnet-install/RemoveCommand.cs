@@ -62,10 +62,12 @@ static class RemoveCommand
 
             string? target = null;
 
-            // Also remove the _appname directory if it exists (legacy payload)
+            // Also remove the metadata sidecar and any legacy _appname payload dir
             string appDir = Path.Combine(installDir, $"_{effectiveName}");
             if (Directory.Exists(appDir))
                 Directory.Delete(appDir, true);
+
+            ToolMetadata.Delete(installDir, effectiveName);
 
             foreach (string entryPath in entryPaths)
             {

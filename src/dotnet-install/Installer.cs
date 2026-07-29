@@ -21,7 +21,7 @@ static class Installer
     public static string LocalBinDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
 
-    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false, InstallSource? update = null, string? commandName = null)
+    public static int Install(string projectFile, string installDir, InstallSource? source = null, bool requireSourceLink = false, bool quiet = false, string? commandName = null)
     {
         // 1. Evaluate the project to read properties before building
         var info = EvaluateProject(projectFile);
@@ -122,8 +122,7 @@ static class Installer
             {
                 InstallLayout.RemoveLegacyLauncher(installDir, installName);
                 InstallLayout.ResetMetadataDirectory(installDir, installName);
-                string metaDir = InstallLayout.MetadataDirectory(installDir, installName);
-                ToolMetadata.Write(metaDir, new ToolManifest { Source = source, Update = update });
+                ToolMetadata.Write(installDir, installName, new ToolManifest { Source = source });
             }
 
             if (!quiet)
@@ -327,8 +326,7 @@ static class Installer
             // Write install metadata for update tracking
             InstallLayout.RemoveLegacyLauncher(installDir, commandName);
             InstallLayout.ResetMetadataDirectory(installDir, commandName);
-            string metaDir = InstallLayout.MetadataDirectory(installDir, commandName);
-            ToolMetadata.Write(metaDir, new ToolManifest
+            ToolMetadata.Write(installDir, commandName, new ToolManifest
             {
                 Source = new InstallSource
                 {
@@ -511,8 +509,7 @@ static class Installer
 
             InstallLayout.RemoveLegacyLauncher(installDir, commandName);
             InstallLayout.ResetMetadataDirectory(installDir, commandName);
-            string metaDir = InstallLayout.MetadataDirectory(installDir, commandName);
-            ToolMetadata.Write(metaDir, new ToolManifest
+            ToolMetadata.Write(installDir, commandName, new ToolManifest
             {
                 Source = new InstallSource { Type = "nuget", Package = packageName, Version = version }
             });
@@ -928,6 +925,23 @@ static class Installer
     static bool IsExecutable(string outputType) =>
         outputType.Equals("Exe", StringComparison.OrdinalIgnoreCase) ||
         outputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Cheap XML-only test for whether a project produces an executable. Used when
+    /// scanning a repo for candidate projects, where running a full MSBuild
+    /// evaluation over every project would be prohibitively slow.
+    /// </summary>
+    internal static bool IsExecutableProject(string projectFile)
+    {
+        try
+        {
+            return IsExecutable(EvaluateProjectFromXml(projectFile).OutputType);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// SDKs that implicitly set OutputType=Exe (so it won't appear in the raw XML).

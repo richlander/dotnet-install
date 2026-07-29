@@ -74,11 +74,10 @@ try {
     $dest = Join-Path $installDir "dotnet-install.exe"
     Copy-Item $bin $dest -Force
 
-    # Write update metadata sidecar
-    $metaDir = Join-Path $installDir "_dotnet-install"
-    New-Item -ItemType Directory -Path $metaDir -Force | Out-Null
-    $metaJson = "{`"source`":{`"type`":`"github-release`",`"repository`":`"richlander/dotnet-install`",`"version`":`"$version`"},`"update`":{`"type`":`"nuget`",`"package`":`"dotnet-install`",`"version`":`"$version`"}}"
-    Set-Content -Path (Join-Path $metaDir ".tool.json") -Value $metaJson -NoNewline
+    # Write update metadata sidecar: a flat .tool.<name>.json next to the binary,
+    # matching what the tool itself writes.
+    $metaJson = "{`"source`":{`"type`":`"github-release`",`"repository`":`"richlander/dotnet-install`",`"version`":`"$version`"}}"
+    Set-Content -Path (Join-Path $installDir ".tool.dotnet-install.json") -Value $metaJson -NoNewline
 
     Write-Host "dotnet-install: installed to $dest"
 

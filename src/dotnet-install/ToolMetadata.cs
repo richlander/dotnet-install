@@ -2,26 +2,124 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 /// <summary>
-/// Metadata sidecar (.tool.json) written alongside installed tools.
-/// Tracks runtime dispatch info and install provenance for updates.
+/// Metadata sidecar written alongside installed tools, tracking runtime dispatch
+/// info and install provenance for updates.
+///
+/// The sidecar for a tool lives at <c>installDir/.tool.&lt;name&gt;.json</c> — a flat
+/// dotfile next to the binary. Older installs kept it as <c>.tool.json</c> inside a
+/// per-tool <c>_&lt;name&gt;/</c> directory; those are still read, and are migrated to
+/// the flat form the next time the tool is installed or updated.
 /// </summary>
 static class ToolMetadata
 {
+    /// <summary>Legacy sidecar filename, inside <c>_&lt;name&gt;/</c>.</summary>
     internal const string FileName = ".tool.json";
+
+    const string SidecarPrefix = ".tool.";
+    const string SidecarSuffix = ".json";
+
+    /// <summary>Sidecar path for a tool: <c>installDir/.tool.&lt;name&gt;.json</c>.</summary>
+    internal static string SidecarPath(string installDir, string toolName) =>
+        Path.Combine(installDir, SidecarPrefix + toolName + SidecarSuffix);
+
+    /// <summary>
+    /// The tool name a sidecar filename encodes, or null if it isn't a sidecar.
+    /// </summary>
+    internal static string? ToolNameFromSidecar(string fileName)
+    {
+        if (!fileName.StartsWith(SidecarPrefix, StringComparison.Ordinal) ||
+            !fileName.EndsWith(SidecarSuffix, StringComparison.Ordinal))
+            return null;
+
+        int length = fileName.Length - SidecarPrefix.Length - SidecarSuffix.Length;
+        return length > 0 ? fileName.Substring(SidecarPrefix.Length, length) : null;
+    }
 
     internal static string GetPath(string toolDir) =>
         Path.Combine(toolDir, FileName);
 
-    internal static void Write(string toolDir, ToolManifest manifest)
+    /// <summary>
+    /// Write a tool's sidecar, and clear the legacy <c>_&lt;name&gt;/</c> directory if
+    /// it held nothing but the old sidecar. A directory with other content is left
+    /// alone — that is stale managed payload, which the install path purges
+    /// separately via <see cref="InstallLayout.ResetMetadataDirectory"/>.
+    /// </summary>
+    internal static void Write(string installDir, string toolName, ToolManifest manifest)
     {
-        string path = GetPath(toolDir);
+        Directory.CreateDirectory(installDir);
         string json = JsonSerializer.Serialize(manifest, ToolManifestContext.Default.ToolManifest);
-        File.WriteAllText(path, json);
+        File.WriteAllText(SidecarPath(installDir, toolName), json);
+
+        string legacyDir = InstallLayout.MetadataDirectory(installDir, toolName);
+        if (Directory.Exists(legacyDir) && HoldsOnlyLegacySidecar(legacyDir))
+        {
+            try
+            {
+                Directory.Delete(legacyDir, recursive: true);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
-    internal static ToolManifest? Read(string toolDir)
+    static bool HoldsOnlyLegacySidecar(string dir)
     {
-        string path = GetPath(toolDir);
+        foreach (string path in Directory.EnumerateFileSystemEntries(dir))
+        {
+            if (!string.Equals(Path.GetFileName(path), FileName, StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Read a tool's sidecar, preferring the flat form and falling back to the
+    /// legacy <c>_&lt;name&gt;/.tool.json</c> so installs predating the move keep working.
+    /// </summary>
+    internal static ToolManifest? Read(string installDir, string toolName) =>
+        ReadFile(SidecarPath(installDir, toolName))
+        ?? ReadFile(GetPath(InstallLayout.MetadataDirectory(installDir, toolName)));
+
+    /// <summary>Read a legacy sidecar from a <c>_&lt;name&gt;/</c> directory.</summary>
+    internal static ToolManifest? ReadFromDirectory(string toolDir) =>
+        ReadFile(GetPath(toolDir));
+
+    /// <summary>
+    /// Every tool with a sidecar in <paramref name="installDir"/>, flat form and
+    /// legacy directories alike. Flat wins when a tool somehow has both.
+    /// </summary>
+    internal static List<(string Name, ToolManifest Manifest)> Discover(string installDir)
+    {
+        var found = new Dictionary<string, ToolManifest>(StringComparer.Ordinal);
+
+        if (!Directory.Exists(installDir))
+            return [];
+
+        foreach (string dir in Directory.GetDirectories(installDir))
+        {
+            string dirName = Path.GetFileName(dir);
+            if (!dirName.StartsWith('_') || dirName.Length < 2)
+                continue;
+
+            if (ReadFromDirectory(dir) is { } legacy)
+                found[dirName[1..]] = legacy;
+        }
+
+        foreach (string file in Directory.GetFiles(installDir))
+        {
+            if (ToolNameFromSidecar(Path.GetFileName(file)) is not { } name)
+                continue;
+
+            if (ReadFile(file) is { } manifest)
+                found[name] = manifest;
+        }
+
+        return found.Select(kv => (kv.Key, kv.Value)).OrderBy(t => t.Key).ToList();
+    }
+
+    static ToolManifest? ReadFile(string path)
+    {
         if (!File.Exists(path)) return null;
 
         try
@@ -34,6 +132,14 @@ static class ToolMetadata
             return null;
         }
     }
+
+    /// <summary>Delete a tool's sidecar, both flat and legacy forms.</summary>
+    internal static void Delete(string installDir, string toolName)
+    {
+        string sidecar = SidecarPath(installDir, toolName);
+        if (File.Exists(sidecar))
+            File.Delete(sidecar);
+    }
 }
 
 class ToolManifest
@@ -42,13 +148,6 @@ class ToolManifest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public InstallSource? Source { get; set; }
 
-    /// <summary>
-    /// Preferred update channel, overrides Source for updates.
-    /// Set by repo config (.dotnet-install.json) or install scripts.
-    /// </summary>
-    [JsonPropertyName("update")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public InstallSource? Update { get; set; }
 }
 
 /// <summary>
@@ -151,11 +250,6 @@ class ToolConfig
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Project { get; set; }
 
-    /// <summary>Preferred update channel (e.g., NuGet package).</summary>
-    [JsonPropertyName("update")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public InstallSource? Update { get; set; }
-
     /// <summary>
     /// Toolset the repo advertises. When present and installing from the repo
     /// root, every listed project is built and installed together.
@@ -248,22 +342,67 @@ class BundleEntry
 
 /// <summary>
 /// A single tool a manifest describes. Modeled on Cargo's <c>[[bin]]</c> target:
-/// <c>name</c> is the command placed on PATH (Cargo's <c>name</c>), and
-/// <c>project</c> is the repo-relative source to build (Cargo's <c>path</c>).
-/// Both are optional: <c>project</c> is present only in source scenarios, and
-/// <c>name</c> is derived from the project's assembly name when omitted.
+/// <c>name</c> is the command placed on PATH (Cargo's <c>name</c>), and the entry
+/// names exactly one source to install it from.
+///
+/// <list type="bullet">
+///   <item><c>project</c> — a repo-relative <c>.csproj</c> or file-based app to
+///   build from this repo's source (Cargo's <c>path</c>).</item>
+///   <item><c>package</c> — a NuGet package, optionally pinned with
+///   <c>version</c>.</item>
+///   <item><c>repository</c> — another git repo (<c>owner/repo</c> or a URL),
+///   optionally pinned with <c>ref</c>.</item>
+/// </list>
+///
+/// A manifest may mix all three, so a repo can advertise its own tools alongside
+/// the third-party ones its toolset depends on. <c>name</c> is optional: for a
+/// project it defaults to the assembly name, and for a package or repository the
+/// source declares its own command name.
 /// </summary>
 class Tool
 {
-    /// <summary>Command name on PATH. Derived from the assembly name when omitted.</summary>
+    /// <summary>Command name on PATH. Derived from the source when omitted.</summary>
     [JsonPropertyName("name")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; set; }
 
-    /// <summary>Repo-relative project (or file-based app) to build. Source-only.</summary>
+    /// <summary>Repo-relative project (or file-based app) to build.</summary>
     [JsonPropertyName("project")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Project { get; set; }
+
+    /// <summary>NuGet package id to install.</summary>
+    [JsonPropertyName("package")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Package { get; set; }
+
+    /// <summary>Version for <see cref="Package"/>. Latest when omitted.</summary>
+    [JsonPropertyName("version")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Version { get; set; }
+
+    /// <summary>Another git repo to build: <c>owner/repo</c> or a git URL.</summary>
+    [JsonPropertyName("repository")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Repository { get; set; }
+
+    /// <summary>Branch, tag, or commit for <see cref="Repository"/>.</summary>
+    [JsonPropertyName("ref")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Ref { get; set; }
+
+    /// <summary>
+    /// The sources this entry names. Exactly one is valid; the count is what
+    /// distinguishes "nothing specified" from "ambiguous" in error reporting.
+    /// </summary>
+    internal string[] DeclaredSources()
+    {
+        var declared = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(Project)) declared.Add("project");
+        if (!string.IsNullOrWhiteSpace(Package)) declared.Add("package");
+        if (!string.IsNullOrWhiteSpace(Repository)) declared.Add("repository");
+        return [.. declared];
+    }
 }
 
 [JsonSerializable(typeof(ToolManifest))]

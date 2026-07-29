@@ -87,20 +87,9 @@ static class OutdatedCommand
 
     static List<ToolInfo> DiscoverTools(string installDir)
     {
-        var tools = new List<ToolInfo>();
-
-        foreach (string entry in Directory.GetDirectories(installDir))
-        {
-            string dirName = Path.GetFileName(entry);
-            if (!dirName.StartsWith('_'))
-                continue;
-
-            string toolName = dirName[1..];
-            var manifest = ToolMetadata.Read(entry);
-            if (manifest?.Source is not null)
-                tools.Add(new ToolInfo(toolName, manifest));
-        }
-
-        return tools.OrderBy(t => t.Name).ToList();
+        return ToolMetadata.Discover(installDir)
+            .Where(t => t.Manifest.Source is not null)
+            .Select(t => new ToolInfo(t.Name, t.Manifest))
+            .ToList();
     }
 }

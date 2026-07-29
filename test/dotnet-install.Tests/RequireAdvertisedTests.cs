@@ -1,9 +1,8 @@
 namespace dotnet_install.Tests;
 
-// The inside/outside gesture model requires --repo/--github repos to advertise
-// their tools via .dotnet-install/.dotnet-install.json (the "tools" array, or the
-// legacy exe/project/bundle fields), unless an explicit --project override names
-// the project.
+// The gesture model requires --repo/--github repos to advertise their tools via
+// .dotnet-install/.dotnet-install.json (the "tools" array, or the legacy
+// exe/project/bundle fields), unless an explicit --project override names the project.
 public class RequireAdvertisedTests
 {
     [Fact]

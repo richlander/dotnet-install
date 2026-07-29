@@ -11,13 +11,17 @@ static class ProjectSelector
     /// Prompts the user to select a project from a list.
     /// Returns the selected project path, or null if cancelled/too many.
     /// </summary>
-    public static string? Select(List<string> projects, string baseDir)
+    /// <param name="interactive">
+    /// Whether the caller opted into a prompt by naming a path. The bare command does
+    /// not, so an ambiguous directory is reported rather than answered with a menu.
+    /// </param>
+    public static string? Select(List<string> projects, string baseDir, bool interactive = true)
     {
         var relative = projects
             .Select(p => Path.GetRelativePath(baseDir, p))
             .ToList();
 
-        if (projects.Count > MaxInteractiveItems || Console.IsInputRedirected)
+        if (!interactive || projects.Count > MaxInteractiveItems || Console.IsInputRedirected)
         {
             Console.Error.WriteLine(projects.Count > MaxInteractiveItems
                 ? $"error: {projects.Count} executable projects found (too many to select interactively). Use --project to specify:"
@@ -25,6 +29,13 @@ static class ProjectSelector
 
             foreach (string p in relative)
                 Console.Error.WriteLine($"  {p}");
+
+            if (!interactive && projects.Count <= MaxInteractiveItems && !Console.IsInputRedirected)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("Or pass a path to choose interactively:");
+                Console.Error.WriteLine("  dotnet-install .");
+            }
 
             return null;
         }
