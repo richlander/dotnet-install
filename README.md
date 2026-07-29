@@ -5,14 +5,14 @@ Install .NET executables to PATH — like `cargo install` and `go install`.
 Built with .NET, AOT-compiled, no runtime required.
 
 ```bash
-dotnet-install .                                      # Build & install current project
 dotnet-install --package dotnet-inspect               # Install from NuGet
 dotnet-install --github richlander/dotnet-runtimeinfo # Install from GitHub
+dotnet-install                                        # Build & install what's here
 ```
 
 dotnet-install installs **single-file executables only** — Native AOT or
-self-contained single-file tools (CLI tools v2). For managed or multi-file
-tools, use `dotnet tool install` with the .NET SDK.
+self-contained single-file tools. For managed or multi-file tools, use
+`dotnet tool install` with the .NET SDK.
 
 ## Why not `dotnet tool install`?
 
@@ -36,7 +36,8 @@ dotnet-install goes further:
 
 ## Install
 
-No .NET required — downloads a self-contained native binary.
+No .NET required — downloads a self-contained native binary and configures
+your PATH.
 
 **Linux / macOS:**
 
@@ -55,7 +56,6 @@ irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1
 
 ```bash
 dotnet tool install -g dotnet-install
-dotnet-install doctor --fix
 ```
 
 ### From source
@@ -68,48 +68,51 @@ For contributors or local development:
 
 Builds from the local source tree via `dotnet publish` (requires the .NET SDK).
 
-## Usage
+## Consuming tools
 
-### Install tools
-
-There are two directions, distinguished by whether you're pointing *at* a repo
-from outside or working *inside* one:
+This is the daily-drive path, and it works the way `dotnet tool install` and
+`cargo install` do: **you point at a source, you get a command on your PATH.**
 
 ```bash
-# Inside a repo — install its advertised tools LOCALLY (./.dotnet/bin)
-dotnet-install .
-
-# From outside — install GLOBALLY (~/.dotnet/bin)
-dotnet-install --package dotnet-inspect
-dotnet-install --package dotnet-inspect@0.16.0
-dotnet-install --github richlander/dotnet-runtimeinfo
+dotnet-install --package dotnet-inspect                # from NuGet
+dotnet-install --package dotnet-inspect@0.16.0         # pinned version
+dotnet-install --github richlander/dotnet-runtimeinfo  # from GitHub
 dotnet-install --repo https://github.com/richlander/dotnet-runtimeinfo
-dotnet-install --repo ../some/local/repo
-dotnet-install --project src/my-tool
 ```
 
-- **`dotnet-install .`** (inside request) installs a repo's *advertised* toolset
-  — from `./.dotnet-install/.dotnet-install.json` — into a repo-local
-  `./.dotnet/bin`, so it never pollutes your global tools. If the directory
-  advertises nothing, it's treated as an outside request: at a terminal it
-  scans for a project and installs it globally; when piped it errors (use
-  `--project .` to install globally in scripts).
-- **`--repo` / `--github`** (outside requests) build a repo and install
-  globally. They require the repo to advertise a tool or bundle via
-  `.dotnet-install/.dotnet-install.json` (or name one with `--project`).
-  `--github owner/repo` is shorthand for a `--repo` GitHub URL. `--git` is a
-  deprecated alias for `--repo`.
-- **`--project <path>`** installs a specific project globally (no manifest
-  needed). **`--package`** installs from NuGet.
-- Running `dotnet-install` with no arguments prints help.
+The source is always explicit for remote installs. With no arguments,
+dotnet-install works on the current directory, the way `dotnet publish` does.
 
-NuGet packages using the [DotNetCliTool v3][v3] layout are supported: a
-pointer package resolves to the right RID-specific payload for your platform,
-and a bundle package installs its members together. As always, only native
-single-file payloads are installed — a package that resolves to a managed
-`any` fallback points you at `dotnet tool install`.
+Everything lands in `~/.dotnet/bin`, flat:
+
+```text
+~/.dotnet/bin/
+  dotnet-inspect        # just the binary
+  _dotnet-inspect/
+    .tool.json          # install source (for `update`)
+```
+
+Use `-o <dir>` to install somewhere else, or `--local-bin` for `~/.local/bin`.
+
+### NuGet packages
+
+`--package` installs from NuGet. Packages using the [DotNetCliTool v3][v3]
+layout are supported: a pointer package resolves to the right RID-specific
+payload for your platform, and a bundle package installs its members together.
+As always, only native single-file payloads are installed — a package that
+resolves to a managed `any` fallback points you at `dotnet tool install`.
 
 [v3]: https://github.com/dotnet/designs/blob/main/accepted/2026/dotnet-cli-tools-v3.md
+
+### Repos
+
+`--repo` takes a git URL or a local path; `--github owner/repo` is shorthand
+for the GitHub URL. Either way the repo is built from source and the result is
+installed. Pin with `--branch`, `--tag`, or `--rev`.
+
+A repo must **advertise** what it publishes (see below) — or you name a project
+with `--project`. dotnet-install won't guess which of a repo's projects is the
+one you meant.
 
 ### List installed tools
 
@@ -120,13 +123,7 @@ dotnet-inspect      0.16.0   single-file  nuget
 dotnet-runtimeinfo  3.0.1    single-file  nuget
 ```
 
-Use `--no-header` for scripting:
-
-```bash
-$ dotnet-install ls --no-header
-dotnet-inspect      0.16.0   single-file  nuget
-dotnet-runtimeinfo  3.0.1    single-file  nuget
-```
+Use `--no-header` for scripting, or `--json` for structured output.
 
 ### Update all tools
 
@@ -136,13 +133,148 @@ dotnet-inspect (dotnet-inspect.osx-arm64 0.16.0)... up to date
 dotnet-runtimeinfo (dotnet-runtimeinfo.osx-arm64 3.0.1)... up to date
 ```
 
+`dotnet-install outdated` checks without installing.
+
 ### Remove tools
 
 ```bash
 dotnet-install rm dotnet-inspect
 ```
 
-### Unsupported tools
+## Producing tools
+
+Building your own tool is closer to `cargo install`: a clean release build,
+single-file output only, and a flat install location with no subdirectories.
+
+From inside a project directory, no arguments needed:
+
+```bash
+dotnet-install
+```
+
+A path works too, and `.` isn't special — any path is fine:
+
+```bash
+dotnet-install src/my-tool
+dotnet-install ~/git/my-tool
+dotnet-install app.cs            # file-based app
+```
+
+Either way dotnet-install looks for an executable project, scanning
+subdirectories when nothing sits at the top level. Nothing found is an error:
+
+```text
+$ dotnet-install
+error: no project file found in '/home/me/scratch'; see 'dotnet-install --help'
+```
+
+### Choosing between projects
+
+When several projects match, **naming a path is what opts you into the
+picker**. The bare command never starts a prompt you didn't ask for — it
+reports the ambiguity and stops:
+
+```text
+$ dotnet-install
+error: multiple executable projects found. Use --project to specify:
+  src/tool-a/tool-a.csproj
+  src/tool-b/tool-b.csproj
+
+Or pass a path to choose interactively:
+  dotnet-install .
+```
+
+```text
+$ dotnet-install .
+Multiple executable projects found. Select one:
+
+  ❯ src/tool-a/tool-a.csproj
+    src/tool-b/tool-b.csproj
+  ↑↓/jk Navigate  Enter Select  Esc Cancel
+```
+
+A path only ever looks for a project — it doesn't read the repo's manifest.
+That's what separates it from `--repo`, below.
+
+### Advertising a tool or toolset
+
+A repo can declare its official output — one tool or several — with a manifest
+in a well-known directory: `.dotnet-install/.dotnet-install.json`, not bare at
+the repo root (mirroring `.claude-plugin/` for skills).
+
+Each entry in the `tools` array names a `name` (the command placed on `PATH`)
+and a repo-relative `project` to build — modeled on Cargo's `[[bin]]` target:
+
+```json
+{
+  "version": 3,
+  "name": "my-tool",
+  "tools": [
+    { "name": "my-tool", "project": "src/my-tool/my-tool.csproj" }
+  ],
+  "update": { "type": "nuget", "package": "my-tool" }
+}
+```
+
+Both fields are optional: a single-tool manifest that omits `project`
+auto-detects the repo's sole executable, and `name` is derived from the
+assembly name when omitted.
+
+List several entries to advertise a set of tools — each must name its own
+`project`:
+
+```json
+{
+  "version": 3,
+  "name": "my-toolset",
+  "tools": [
+    { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
+    { "name": "tool-b", "project": "src/tool-b/tool-b.csproj" }
+  ]
+}
+```
+
+The shape mirrors the DotNetCliTool v3 manifest, so the same toolset can be
+published as a v3 bundle package. The legacy `exe`, `project`, and `bundle`
+fields still work.
+
+Once a repo advertises its toolset, `--repo` builds and installs the whole set:
+
+```bash
+dotnet-install --repo .
+```
+
+This is the maintainer's gesture, and it's what the manifest is for:
+
+| | |
+| --- | --- |
+| `dotnet-install .` | finds *a project* — you get whatever is there |
+| `dotnet-install --repo .` | builds what the repo *publishes* — one tool or many |
+
+`--repo` saves you from remembering the path to the project, and builds
+multiple tools in one gesture — the DotNetCliTool v3 bundle concept, applied to
+a source tree. Installation stops at the first failure, leaving
+already-installed tools in place. An explicit `--project` overrides the toolset
+and installs a single tool.
+
+### Project configuration
+
+No new properties required, but the project must produce a single-file
+executable. Enable Native AOT or self-contained single-file publishing:
+
+```xml
+<!-- Native AOT (recommended — produces a single native binary) -->
+<PublishAot>true</PublishAot>
+
+<!-- OR single-file CoreCLR -->
+<PublishSingleFile>true</PublishSingleFile>
+<SelfContained>true</SelfContained>
+```
+
+Managed or multi-file tools aren't supported here — install those with
+`dotnet tool install`.
+
+## Unsupported tools
 
 dotnet-install only installs single-file native executables. If a NuGet
 package is a managed (multi-file) tool, or a source build doesn't produce a
@@ -173,120 +305,6 @@ Uninstall the .NET SDK tool first, then re-run this command:
   dotnet tool uninstall -g dotnet-inspect
 ```
 
-## How it works
-
-Every tool is a single-file native executable, placed directly on PATH —
-identical to Rust/Go. A small metadata sidecar tracks the install source
-for updates:
-
-```text
-~/.dotnet/bin/
-  mytool              # just the binary
-  _mytool/
-    .tool.json        # install source (for `update`)
-```
-
-### Repo-local tools
-
-When a repo advertises its tools (a `.dotnet-install/.dotnet-install.json`
-manifest), running `dotnet-install .` inside it builds those tools into a
-repo-local `.dotnet/bin/` directory — decoupled from the volatile `artifacts/`
-output and never touching the global `~/.dotnet/bin`:
-
-```bash
-dotnet-install .
-```
-
-```text
-Installed to .dotnet/bin
-
-Activate for this shell (transient — not added to your shell profile):
-  . .dotnet/bin/env
-```
-
-`doctor` is worktree-aware: run it from anywhere inside the repo and, if a
-`<git-root>/.dotnet/bin` directory exists, it reports whether that directory
-is git-ignored and whether it is active on `PATH` for the current shell:
-
-```text
-Repo-local tools: .dotnet/bin
-⚠ .dotnet/ is not git-ignored
-  Run with --fix to add it to .gitignore
-⚠ not on PATH for this shell
-  Activate for this shell (transient — not added to your shell profile):
-    . .dotnet/bin/env
-```
-
-`doctor --fix` adds `.dotnet/` to `.gitignore`. Activation is intentionally
-**transient**: sourcing the generated `env` file adds the directory to `PATH`
-for the current shell only — a repo-specific path is never written to your
-global shell profile.
-
-## Project configuration
-
-No new properties required, but the project must produce a single-file
-executable. Enable Native AOT or self-contained single-file publishing:
-
-```xml
-<!-- Native AOT (recommended — produces a single native binary) -->
-<PublishAot>true</PublishAot>
-
-<!-- OR single-file CoreCLR -->
-<PublishSingleFile>true</PublishSingleFile>
-<SelfContained>true</SelfContained>
-```
-
-Managed or multi-file tools aren't supported here — install those with
-`dotnet tool install`.
-
-### Advertising a tool or toolset
-
-A repo can advertise what to install by adding a manifest in a well-known
-directory — `.dotnet-install/.dotnet-install.json` — not bare at the repo root
-(mirroring `.claude-plugin/` for skills). It's read whenever you install from
-the repo: `dotnet-install --github owner/repo`, `--repo <url|path>`, or a local
-checkout (`dotnet-install .`).
-
-A repo advertises its toolset with a `tools` array. Each entry names a `name`
-(the command placed on `PATH`) and a repo-relative `project` to build — modeled
-on Cargo's `[[bin]]` target. A single entry is a one-tool repo (handy when the
-project isn't at the repo root, so `dotnet-install .` just works):
-
-```json
-{
-  "version": 3,
-  "name": "my-tool",
-  "tools": [
-    { "name": "my-tool", "project": "src/my-tool/my-tool.csproj" }
-  ],
-  "update": { "type": "nuget", "package": "my-tool" }
-}
-```
-
-Both fields are optional: a single-tool manifest that omits `project`
-auto-detects the repo's sole executable, and `name` is derived from the
-assembly name when omitted. List several entries to advertise a set of tools —
-each must name its own `project`:
-
-```json
-{
-  "version": 3,
-  "name": "my-toolset",
-  "tools": [
-    { "name": "tool-a", "project": "src/tool-a/tool-a.csproj" },
-    { "name": "tool-b", "project": "src/tool-b/tool-b.csproj" }
-  ]
-}
-```
-
-Installing from the repo root builds and installs every listed tool.
-Installation stops at the first failure, leaving already-installed tools in
-place. An explicit `--project` overrides the toolset and installs a single tool.
-The `update` channel is honored only for global installs; `dotnet-install .`
-into `./.dotnet/bin` always rebuilds from the checkout. The legacy `exe`,
-`project`, and `bundle` fields still work. The shape mirrors the DotNetCliTool
-v3 manifest, so the same toolset can be published as a v3 bundle package.
-
 ## Commands and options
 
 ```text
@@ -295,7 +313,7 @@ dotnet-install [<project>] [command] [options]
 Options:
   --package <name[@version]>   Install a tool from NuGet
   --github <owner/repo[@ref]>  Install from a GitHub repository
-  --repo <url|path>            Clone/build a repo (URL or local path) and install globally
+  --repo <url|path>            Build a repo (git URL or local path) and install its advertised tools
   --branch <name>              Git branch to track (updatable)
   --tag <name>                 Git tag to install (pinned)
   --rev <sha>                  Git commit SHA to install (pinned)
@@ -323,5 +341,6 @@ Commands:
 
 ## Design
 
-See [dotnet/sdk#50747](https://github.com/dotnet/sdk/issues/50747)
-for the full proposal.
+See [DESIGN.md](DESIGN.md) for architecture and rationale, and
+[dotnet/sdk#50747](https://github.com/dotnet/sdk/issues/50747) for the full
+proposal.

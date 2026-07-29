@@ -83,24 +83,28 @@ The tool lives at `src/dotnet-install/` in this repo:
 - `skill.md` — Embedded skill for AI assistants (end-user)
 - `HelpWriter.cs` — Markout-based help formatting
 
-## Inside vs. outside requests
+## Install target
 
-Installs come in two directions, which decide the target:
+Every source installs to `~/.dotnet/bin`: `--package`,
+`--repo`, `--github`, `--project`, and bare positional paths.
+This matches `cargo install` and `go install` — you point at a
+thing, you get a tool on PATH. There is a single install
+location; `-o <dir>` overrides it, and `--local-bin` selects
+`~/.local/bin`. Nothing about a repo's contents changes where
+a tool lands.
 
-- **Outside requests** point *at* something and install
-  **globally** to `~/.dotnet/bin`: `--repo`, `--github`,
-  `--project`, `--package`, and bare positional args.
-- **Inside request** — a bare `.` in a repo that advertises
-  tools via `.dotnet-install/.dotnet-install.json` — builds
-  the advertised toolset **locally** into `./.dotnet/bin`, so
-  a repo's dev tooling never pollutes the global set. It
-  writes an env file and prints a transient activation line
-  (`. .dotnet/bin/env`); it never edits the global profile.
+`dotnet install` with no args treats the current directory as
+the source, like `dotnet publish`. `--help` prints help.
 
-`dotnet install` with no args prints help. `dotnet install .`
-with no manifest degrades to an outside request: at a TTY it
-scans and installs a project globally; when piped it errors
-and points at `dotnet install --project .`.
+## Path vs. repo
+
+The two source-build gestures differ only in what they read:
+
+- `dotnet install <path>`, or no argument (meaning the current
+  directory), looks for **a project**. It never reads
+  `.dotnet-install/.dotnet-install.json`.
+- `dotnet install --repo <path>` builds what the repo
+  **advertises** in that manifest — one tool or a toolset.
 
 ## Install modes
 
@@ -108,9 +112,14 @@ and points at `dotnet install --project .`.
 
 Builds and installs from a local project directory.
 Supports both `.csproj` projects and file-based apps (`.cs` with `#:property` directives).
+The tree is scanned for executable projects. If several are found,
+the interactive selector is shown **only when a path was named** —
+the bare command lists candidates and exits non-zero instead, so it
+never prompts unasked (important for scripts and agent loops).
 
 ```bash
-dotnet install .                  # current dir (inside gesture if it advertises tools)
+dotnet install                    # current dir, never prompts
+dotnet install .                  # current dir, enables the picker
 dotnet install src/my-tool        # subdirectory
 dotnet install ~/git/my-tool      # explicit path
 dotnet install app.cs             # file-based app

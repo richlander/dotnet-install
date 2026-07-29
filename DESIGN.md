@@ -45,18 +45,37 @@ install source for `update`.
 
 ## Gesture model
 
-Two directions, which also determine the install target:
+You point at a source; the tool lands on your PATH. This is the
+`cargo install` / `go install` contract, and it holds for every
+source:
 
-| Request | Example | Target |
-| ------- | ------- | ------ |
-| Outside (explicit source) | `--repo`, `--github`, `--project`, `--package` | Global (`~/.dotnet/bin`) |
-| Inside (bare `.`, advertised) | `dotnet-install .` | Local (`./.dotnet/bin`) |
+| Source | Example |
+| ------ | ------- |
+| NuGet package | `--package dotnet-inspect` |
+| Repo (URL or path) | `--repo <url\|path>`, `--github owner/repo` |
+| Specific project | `--project src/my-tool` |
+| Whatever is here | `dotnet-install` (or any path) |
 
-Explicit flags signal intent and install globally. A bare `.` honors a repo's
-advertised tooling and installs locally. With no manifest, `.` degrades to an
-outside request: interactive (a terminal) installs the scanned project globally;
-non-interactive (piped) errors and points at `--project .`. No arguments prints
-help.
+All of them install to `~/.dotnet/bin`. There is exactly one install
+location, and `-o` overrides it like any other tool's output flag —
+nothing about a repo's contents changes where a tool lands.
+
+With no arguments the current directory is the source, the way
+`dotnet publish` works. `--help` prints help.
+
+### Path vs. repo
+
+The two source-build gestures are deliberately kept apart:
+
+- `dotnet-install <path>` (or no argument, meaning the current directory)
+  looks for **a project**. It never reads the manifest, so it behaves the
+  same in any directory.
+- `dotnet-install --repo <path>` builds what the repo **advertises** in
+  `.dotnet-install/.dotnet-install.json` — one tool or a whole toolset.
+
+Splitting them on "does it read the manifest" leaves no overlap to
+explain, and means neither gesture changes behavior based on a file the
+user may not know exists.
 
 ## SDK preflight
 
@@ -76,16 +95,24 @@ storing things under `~/.nuget/`.
 
 ## Project discovery
 
-For GitHub repos with multiple projects, resolution order:
+For a path with multiple projects, resolution order:
 
 1. `--project` flag (explicit path)
 2. `.dotnet-install/.dotnet-install.json` `tools` array — the toolset the repo
    advertises; every listed tool is built and installed together (see below)
-3. Auto-detect `Exe` projects in the repo
-4. File-based apps (`.cs` with `#:property` directives)
+3. Project files or file-based apps sitting directly in the directory
+4. A recursive scan for executable projects (`OutputType=Exe`/`WinExe`, or an
+   SDK that implies one), skipping build output and vendored trees — so pointing
+   at a repo root resolves `src/my-tool/my-tool.csproj` instead of failing
 
-If multiple candidates remain (≤12), an interactive
-arrow-key selector is presented.
+If multiple candidates remain, resolution is ambiguous and the tool stops.
+An arrow-key selector (≤12 candidates, shallowest first) is offered only when
+the user named a path — `dotnet-install .` — never for the bare command.
+
+Interactivity is opt-in for the same reason the install location is: a tool
+should not start a prompt the user did not ask for. The bare command is the
+one most likely to appear in a script or an agent loop, so it always resolves
+or fails.
 
 ## Advertised toolsets
 
@@ -94,21 +121,15 @@ filename and schema:
 
 - **Colocated** — in a directory you point the tool at directly (a project
   directory / local path).
-- **Repo** — at `.dotnet-install/.dotnet-install.json`, read when installing via
-  the repo gesture: `--github`, `--repo <url|path>`, or a local checkout
-  (`dotnet-install .`). The repo root itself is never
-  scanned — only the `.dotnet-install/` directory. This mirrors `.claude-plugin/`
-  for skills, where the advertise manifest lives in a well-known directory rather
-  than bare at the root.
+- **Repo** — at `.dotnet-install/.dotnet-install.json`, read by the repo gesture:
+  `--github` or `--repo <url|path>`. The repo root itself is never scanned — only
+  the `.dotnet-install/` directory. This mirrors `.claude-plugin/` for skills,
+  where the advertise manifest lives in a well-known directory rather than bare
+  at the root.
 
-Direction determines the install target. An **outside** request — `--repo`,
-`--github`, `--project`, `--package` — points at something and installs
-**globally** (`~/.dotnet/bin`). An **inside** request — a bare `.` when the
-directory advertises tools — installs **locally** (`./.dotnet/bin`), so a repo's
-own dev tooling never pollutes the global set. `--repo`/`--github` require the
-repo to advertise a `tools` array unless `--project` names one explicitly;
-`.` with no manifest degrades to an outside request (interactive global install,
-or an error when piped).
+`--repo`/`--github` require the repo to advertise a `tools` array unless
+`--project` names one explicitly. A bare path does not consult the manifest at
+all; it scans for an executable project.
 
 A repo advertises its toolset with a `tools` array. Each entry names a `name`
 (the command placed on `PATH`) and a repo-relative `project` to build. This is
@@ -146,15 +167,10 @@ manifest cannot auto-detect, so every entry must name a `project`:
 This mirrors the tool-bundle concept in the DotNetCliTool v3 design, adapted
 to build-from-source: the entries reference projects in the repo (the "local"
 flavor) rather than NuGet package ids. Installing from the repo
-(`--github`, `--repo`, or a local checkout — `dotnet-install .`) builds and
-installs every entry, recording per-tool provenance so each updates
-independently. Installation stops at the first failure and leaves
-already-installed tools in place. An explicit `--project` overrides the toolset.
-
-The `update` channel is honored only for **outside/global** installs. An
-**inside** install (`dotnet-install .` → `./.dotnet/bin`) always rebuilds from
-the checkout, so no update channel is recorded — you refresh by re-running
-against the repo.
+(`--github` or `--repo`) builds and installs every entry, recording per-tool
+provenance so each updates independently. Installation stops at the first
+failure and leaves already-installed tools in place. An explicit `--project`
+overrides the toolset.
 
 The legacy `exe`, `project`, and `bundle` fields remain readable and are
 normalized onto the `tools` array, so existing manifests keep working.

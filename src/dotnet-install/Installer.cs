@@ -930,6 +930,23 @@ static class Installer
         outputType.Equals("WinExe", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Cheap XML-only test for whether a project produces an executable. Used when
+    /// scanning a repo for candidate projects, where running a full MSBuild
+    /// evaluation over every project would be prohibitively slow.
+    /// </summary>
+    internal static bool IsExecutableProject(string projectFile)
+    {
+        try
+        {
+            return IsExecutable(EvaluateProjectFromXml(projectFile).OutputType);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// SDKs that implicitly set OutputType=Exe (so it won't appear in the raw XML).
     /// </summary>
     internal static bool SdkImpliesExecutable(string? sdk) =>
