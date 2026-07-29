@@ -346,6 +346,10 @@ All three can be mixed in one toolset:
 }
 ```
 
+A working version of this manifest is committed as a test fixture —
+[`test/fixtures/composed-repo`](test/fixtures/composed-repo) — with tests that
+check all four entries resolve to the right kind.
+
 That makes a manifest a way to describe a whole environment, not just this
 repo's output — a team can put the tools everyone needs in one file and have
 new machines catch up with `dotnet-install --repo .`.
