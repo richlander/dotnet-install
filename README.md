@@ -95,9 +95,7 @@ Publishing (Native AOT, Release)...
 Installed dotnet-runtimeinfo → /Users/rich/.dotnet/bin/dotnet-runtimeinfo
 ```
 
-`go install` says nothing on success, `cargo install` narrates every crate;
-dotnet-install sits in between. All three end the same way — a single
-executable you can run by name.
+All three install single-file native executables.
 
 Installing from NuGet skips the build entirely: `--package` downloads a
 prebuilt native binary, so there's no compile step at all.
