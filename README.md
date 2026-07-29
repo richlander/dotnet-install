@@ -29,6 +29,9 @@ dotnet-install goes further:
   installed tools at once, like `npm update`
 - **Just run it** — installed tools are on PATH; no `dotnet run`
   needed to find the executable
+- **One gesture from source** — build and install in a single step, like
+  `cargo install`. The SDK has no publish-pack-install path: you
+  `dotnet pack`, then install from a local feed
 - **Clean release build** — always does a publish-optimized build,
   just like `cargo install` and `go install`
 - **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
@@ -196,6 +199,11 @@ dotnet-install rm dotnet-inspect
 
 Building your own tool is closer to `cargo install`: a clean release build,
 single-file output only, and a flat install location with no subdirectories.
+
+It's also one step. The SDK has no gesture that goes from source to an
+installed command — you `dotnet pack`, then `dotnet tool install` from a
+local feed, producing a NuGet package you didn't want just to move a
+binary onto your own PATH.
 
 From inside a project directory, no arguments needed:
 
