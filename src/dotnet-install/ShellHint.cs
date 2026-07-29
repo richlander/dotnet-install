@@ -159,6 +159,12 @@ static class ShellHint
     /// <summary>
     /// After a successful install, check if the install directory is on PATH.
     /// If not, print shell-specific instructions.
+    ///
+    /// This hint is load-bearing, not decorative: installing writes the binary but
+    /// never touches PATH, so until the user runs `doctor --fix` (the only thing
+    /// that writes the export line to their shell rc) a freshly installed tool
+    /// cannot be invoked by name. The install still reports success, which makes
+    /// the hint look redundant — it isn't.
     /// </summary>
     public static void PrintIfNeeded(string installDir)
     {

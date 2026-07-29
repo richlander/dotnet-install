@@ -59,10 +59,9 @@ main() {
     ensure cp "$_bin" "$INSTALL_DIR/dotnet-install"
     ensure chmod +x "$INSTALL_DIR/dotnet-install"
 
-    # Write update metadata sidecar
-    local _meta_dir="$INSTALL_DIR/_dotnet-install"
-    ensure mkdir -p "$_meta_dir"
-    printf '{"source":{"type":"github-release","repository":"richlander/dotnet-install","version":"%s"},"update":{"type":"nuget","package":"dotnet-install","version":"%s"}}' "$_version" "$_version" > "$_meta_dir/.tool.json"
+    # Write update metadata sidecar: a flat .tool.<name>.json next to the binary,
+    # matching what the tool itself writes.
+    printf '{"source":{"type":"github-release","repository":"richlander/dotnet-install","version":"%s"},"update":{"type":"nuget","package":"dotnet-install","version":"%s"}}' "$_version" "$_version" > "$INSTALL_DIR/.tool.dotnet-install.json"
 
     say "installed to ${INSTALL_DIR}/dotnet-install"
 

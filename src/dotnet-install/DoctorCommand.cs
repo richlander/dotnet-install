@@ -4,6 +4,11 @@ using System.Text.Json.Serialization;
 
 /// <summary>
 /// Validate dotnet-install environment. Reports issues by default; --fix applies remediation.
+///
+/// The remediation that matters most is PATH: nothing else in the tool writes the
+/// install directory to the user's shell rc, so `--fix` is how installed tools
+/// become runnable by name. It is part of the normal first-run path, not a repair
+/// tool for broken setups.
 /// </summary>
 static class DoctorCommand
 {

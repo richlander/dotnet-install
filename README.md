@@ -36,7 +36,12 @@ irm https://github.com/richlander/dotnet-install/raw/refs/heads/main/install.ps1
 
 ```bash
 dotnet tool install -g dotnet-install
+dotnet-install doctor --fix
 ```
+
+This route puts `dotnet-install` itself on PATH but not `~/.dotnet/bin`, where
+the tools it installs land — `doctor --fix` adds it. The scripts above do this
+step for you.
 
 ### From source
 
