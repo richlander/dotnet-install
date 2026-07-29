@@ -53,15 +53,8 @@ static class GitSource
         // Checkout ref
         if (gitRef is not null)
         {
-            if (!quiet) Console.WriteLine($"Checking out {gitRef}...");
-            if (Run("git", ["-C", repoDir, "checkout", gitRef]) != 0)
-            {
-                if (Run("git", ["-C", repoDir, "checkout", "--detach", $"origin/{gitRef}"]) != 0)
-                {
-                    Console.Error.WriteLine($"error: could not resolve ref '{gitRef}'");
-                    return 1;
-                }
-            }
+            if (!Checkout(repoDir, gitRef, quiet))
+                return 1;
         }
         else if (isExistingClone)
         {
@@ -189,15 +182,8 @@ static class GitSource
         // Checkout ref
         if (gitRef is not null)
         {
-            if (!quiet) Console.WriteLine($"Checking out {gitRef}...");
-            if (Run("git", ["-C", repoDir, "checkout", gitRef]) != 0)
-            {
-                if (Run("git", ["-C", repoDir, "checkout", "--detach", $"origin/{gitRef}"]) != 0)
-                {
-                    Console.Error.WriteLine($"error: could not resolve ref '{gitRef}'");
-                    return 1;
-                }
-            }
+            if (!Checkout(repoDir, gitRef, quiet))
+                return 1;
         }
         else if (isExistingClone)
         {
@@ -397,6 +383,33 @@ static class GitSource
         return ProjectSelector.Select(exeProjects, repoDir);
     }
 
+    /// <summary>
+    /// Checks out a branch, tag, or commit, trying the bare name first and then
+    /// <c>origin/&lt;ref&gt;</c> for a remote branch no local ref tracks yet.
+    /// </summary>
+    /// <remarks>
+    /// Both attempts are silenced. A failed attempt is not a diagnostic here — it
+    /// is how the fallback is probed — and git's own wording misleads on the way
+    /// past: an unresolvable rev gets reinterpreted as a pathspec, so the user
+    /// sees "--detach does not take a path argument", which reads like a bad
+    /// command rather than a missing branch. On success git only narrates what
+    /// the caller already printed.
+    /// </remarks>
+    static bool Checkout(string repoDir, string gitRef, bool quiet)
+    {
+        if (!quiet) Console.WriteLine($"Checking out {gitRef}...");
+
+        if (RunQuiet("git", ["-C", repoDir, "checkout", gitRef]) == 0)
+            return true;
+
+        if (RunQuiet("git", ["-C", repoDir, "checkout", "--detach", $"origin/{gitRef}"]) == 0)
+            return true;
+
+        Console.Error.WriteLine(
+            $"error: could not resolve ref '{gitRef}'; no branch, tag, or commit by that name.");
+        return false;
+    }
+
     // ---- Process helpers ----
 
     static int Run(string fileName, string[] args)
@@ -407,6 +420,28 @@ static class GitSource
 
         using var p = Process.Start(psi);
         p!.WaitForExit();
+        return p.ExitCode;
+    }
+
+    /// <summary>Runs a command, discarding its output. For attempts that are allowed to fail.</summary>
+    static int RunQuiet(string fileName, string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (string a in args)
+            psi.ArgumentList.Add(a);
+
+        using var p = Process.Start(psi);
+        // Drain stderr concurrently: reading the two pipes in sequence deadlocks
+        // if the stream not being read fills its buffer.
+        var stderr = p!.StandardError.ReadToEndAsync();
+        p.StandardOutput.ReadToEnd();
+        stderr.GetAwaiter().GetResult();
+        p.WaitForExit();
         return p.ExitCode;
     }
 
