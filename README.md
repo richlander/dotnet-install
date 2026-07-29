@@ -107,8 +107,8 @@ dotnet-install can do more with less.
 
 ### On machines without .NET
 
-- **No SDK, no runtime** — install and run Native AOT tools from NuGet
-  packages and GitHub releases on a machine with no .NET on it
+- **Install binary packages** — `--package` downloads a prebuilt Native AOT
+  binary from NuGet; nothing is compiled, so no SDK or runtime is needed
 - **Just run it** — installed tools are on PATH; no `dotnet run`
   needed to find the executable
 - **Simple layout** — tools land in `~/.dotnet/bin/dotnet-inspect`,
