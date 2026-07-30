@@ -205,6 +205,26 @@ that reference each other fail with a cycle error rather than cloning forever.
 The legacy `exe`, `project`, and `bundle` fields remain readable and are
 normalized onto the `tools` array, so existing manifests keep working.
 
+## Manifest parsing is strict
+
+A manifest is read from a repo or a package, so it is untrusted input, and the
+point of the schema rules above is that reading the file tells you what will
+happen. Two parsing behaviours undercut that, so both are refused.
+
+**Duplicate keys are rejected.** JSON does not define how they resolve, and
+`System.Text.Json` binds the last occurrence. A manifest could therefore name a
+trustworthy repo in plain sight and install from a different one further down
+the same object. Reviewing the file would not reveal it.
+
+**A manifest that exists but will not parse is a hard error**, not a missing
+one. The two used to be the same `null`, which reported a typo as a missing
+file and — because callers treat "no manifest" as licence to auto-detect a
+project — could install something other than what the file described.
+
+The sidecar is the exception. It is read while walking every installed tool, so
+one damaged file returns null rather than failing the whole command; the tool
+then reports an unknown source and `update` declines to touch it.
+
 ## DotNetCliTool v3 packages
 
 When a NuGet package carries a `tools/manifest.json` with `"version": 3`,

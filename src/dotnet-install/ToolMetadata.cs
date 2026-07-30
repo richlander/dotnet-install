@@ -118,6 +118,16 @@ static class ToolMetadata
         return found.Select(kv => (kv.Key, kv.Value)).OrderBy(t => t.Key).ToList();
     }
 
+    /// <summary>
+    /// Reads a sidecar, or returns null if it is missing or unreadable.
+    /// </summary>
+    /// <remarks>
+    /// Unlike a repo manifest, an unreadable sidecar is tolerated: list, info, and
+    /// update walk every installed tool, and one damaged file should not take the
+    /// whole command down. Null is the safe answer — the tool reports an unknown
+    /// source and update declines to touch it, rather than acting on a reading
+    /// that may not be the one the file appears to give.
+    /// </remarks>
     static ToolManifest? ReadFile(string path)
     {
         if (!File.Exists(path)) return null;
@@ -312,6 +322,16 @@ class ToolConfig
     internal static ToolConfig? ReadFromRepo(string repoRoot) =>
         ReadFile(Path.Combine(repoRoot, RepoDirName, FileName));
 
+    /// <summary>
+    /// Reads a manifest, or returns null if there is none.
+    /// </summary>
+    /// <remarks>
+    /// A file that exists but cannot be read throws rather than returning null.
+    /// Collapsing the two meant a typo reported the file as missing, sending the
+    /// user to look for something that was right there — and worse, callers treat
+    /// "no manifest" as licence to auto-detect a project, so a broken manifest
+    /// silently installed something other than what it described.
+    /// </remarks>
     static ToolConfig? ReadFile(string path)
     {
         if (!File.Exists(path)) return null;
@@ -319,14 +339,29 @@ class ToolConfig
         try
         {
             string json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize(json, ToolConfigContext.Default.ToolConfig);
+            return JsonSerializer.Deserialize(json, ToolConfigContext.Default.ToolConfig)
+                ?? throw new ManifestException($"{path} is empty.");
         }
-        catch
+        catch (JsonException e)
         {
-            return null;
+            throw new ManifestException($"{path} is not valid JSON: {e.Message}");
+        }
+        catch (IOException e)
+        {
+            throw new ManifestException($"{path} could not be read: {e.Message}");
+        }
+        catch (UnauthorizedAccessException e)
+        {
+            throw new ManifestException($"{path} could not be read: {e.Message}");
         }
     }
 }
+
+/// <summary>
+/// A manifest exists but cannot be trusted to say what it appears to say.
+/// Fatal by design: the alternative is acting on a guess.
+/// </summary>
+class ManifestException(string message) : Exception(message);
 
 /// <summary>
 /// A single entry in a repo's advertised tool bundle. Points at a
@@ -454,10 +489,12 @@ class RepositorySpec
     }
 }
 
+[JsonSourceGenerationOptions(AllowDuplicateProperties = false)]
 [JsonSerializable(typeof(ToolManifest))]
 [JsonSerializable(typeof(ToolConfig))]
 partial class ToolManifestContext : JsonSerializerContext { }
 
 // Keep backward-compatible name; ToolConfig uses same context
+[JsonSourceGenerationOptions(AllowDuplicateProperties = false)]
 [JsonSerializable(typeof(ToolConfig))]
 partial class ToolConfigContext : JsonSerializerContext { }

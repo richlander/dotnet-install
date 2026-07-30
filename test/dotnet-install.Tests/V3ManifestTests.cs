@@ -103,11 +103,32 @@ public class V3ManifestTests : IDisposable
         Assert.Null(m.Commands[0].Runner);
     }
 
+    /// <summary>
+    /// A package whose own manifest will not parse is broken, not a v1/v2 package.
+    /// Returning null conflated the two and installed from a package whose
+    /// description could not be read.
+    /// </summary>
     [Fact]
-    public void TryRead_ReturnsNull_OnInvalidJson()
+    public void TryRead_Throws_OnInvalidJson()
     {
         WriteManifest("{ not valid json");
-        Assert.Null(V3Manifest.TryRead(_tempDir));
+        Assert.Throws<ManifestException>(() => V3Manifest.TryRead(_tempDir));
+    }
+
+    [Fact]
+    public void TryRead_Throws_OnDuplicateProperty()
+    {
+        WriteManifest("""{ "version": 3, "version": 4 }""");
+
+        var e = Assert.Throws<ManifestException>(() => V3Manifest.TryRead(_tempDir));
+        Assert.Contains("Duplicate", e.Message);
+    }
+
+    /// <summary>A package with no v3 manifest is still a v1/v2 package, not an error.</summary>
+    [Fact]
+    public void TryRead_ReturnsNull_WhenAbsent()
+    {
+        Assert.Null(V3Manifest.TryRead(Path.Combine(_tempDir, "nope")));
     }
 
     [Fact]

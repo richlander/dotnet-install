@@ -54,9 +54,12 @@ class V3Manifest
         {
             return JsonSerializer.Deserialize(File.ReadAllText(path), V3ManifestContext.Default.V3Manifest);
         }
-        catch
+        catch (JsonException e)
         {
-            return null;
+            // Package contents are untrusted input. A manifest that will not parse
+            // is a broken package, not a v1/v2 one, and quietly treating it as the
+            // latter installs from a package whose own description was unreadable.
+            throw new ManifestException($"{path} is not valid JSON: {e.Message}");
         }
     }
 
@@ -119,5 +122,6 @@ class V3Command
     public string? Runner { get; set; }
 }
 
+[JsonSourceGenerationOptions(AllowDuplicateProperties = false)]
 [JsonSerializable(typeof(V3Manifest))]
 partial class V3ManifestContext : JsonSerializerContext { }
