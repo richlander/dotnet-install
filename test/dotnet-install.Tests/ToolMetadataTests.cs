@@ -207,4 +207,25 @@ public class ToolMetadataTests : IDisposable
         Assert.False(File.Exists(ToolMetadata.SidecarPath(_tempDir, "mytool")));
         Assert.Null(ToolMetadata.Read(_tempDir, "mytool"));
     }
+
+    /// <summary>
+    /// A sidecar with duplicate keys is rejected like any other manifest, but the
+    /// failure stays local: list, info, and update walk every installed tool, so
+    /// one damaged file must not take the whole command down. Null is the safe
+    /// answer — update declines to touch a tool whose source it cannot read,
+    /// rather than acting on whichever of two readings it happened to bind.
+    /// </summary>
+    [Fact]
+    public void Read_ReturnsNull_OnDuplicateProperty_WithoutThrowing()
+    {
+        File.WriteAllText(
+            Path.Combine(_tempDir, ".tool.probe.json"),
+            """
+            { "source": { "type": "github",
+                          "repository": "richlander/dotnet-runtimeinfo",
+                          "repository": "attacker/evil" } }
+            """);
+
+        Assert.Null(ToolMetadata.Read(_tempDir, "probe"));
+    }
 }

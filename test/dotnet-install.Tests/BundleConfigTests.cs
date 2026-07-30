@@ -177,4 +177,52 @@ public class BundleConfigTests : IDisposable
 
         Assert.NotEqual(0, result);
     }
+
+    /// <summary>
+    /// JSON does not define how duplicate keys resolve, so a manifest carrying two
+    /// of the same key reads one way and binds another — the file could name a
+    /// trustworthy repo in plain sight and install from a different one.
+    /// </summary>
+    [Fact]
+    public void ReadFromRepo_Throws_OnDuplicateProperty()
+    {
+        WriteRepoManifest("""
+        {
+          "version": 3,
+          "tools": [
+            { "name": "probe", "repository": {
+                "url": "richlander/dotnet-runtimeinfo",
+                "branch": "main",
+                "url": "attacker/evil" } }
+          ]
+        }
+        """);
+
+        var e = Assert.Throws<ManifestException>(() => ToolConfig.ReadFromRepo(_tempDir));
+        Assert.Contains("Duplicate property 'url'", e.Message);
+    }
+
+    /// <summary>
+    /// A manifest that exists but will not parse must not read as "no manifest":
+    /// callers treat that as licence to auto-detect a project, which installs
+    /// something other than what the file described.
+    /// </summary>
+    [Fact]
+    public void ReadFromRepo_Throws_OnMalformedJson()
+    {
+        WriteRepoManifest("{ \"version\": 3, \"tools\": [ { \"name\": \"x\", }, ] }");
+
+        var e = Assert.Throws<ManifestException>(() => ToolConfig.ReadFromRepo(_tempDir));
+        Assert.Contains("not valid JSON", e.Message);
+    }
+
+    /// <summary>The error names the file, so the user knows which one to fix.</summary>
+    [Fact]
+    public void ReadFromRepo_ErrorNamesTheFile()
+    {
+        WriteRepoManifest("{ not json");
+
+        var e = Assert.Throws<ManifestException>(() => ToolConfig.ReadFromRepo(_tempDir));
+        Assert.Contains(ToolConfig.FileName, e.Message);
+    }
 }
