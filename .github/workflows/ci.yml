@@ -146,10 +146,15 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-26.04
             rid: linux-x64
-          - os: ubuntu-24.04-arm
+            image: azurelinux-3.0-net11.0-cross-amd64
+            rootfs: /crossrootfs/x64
+          - os: ubuntu-26.04
             rid: linux-arm64
+            image: azurelinux-3.0-net11.0-cross-arm64
+            rootfs: /crossrootfs/arm64
+            cross: true
           - os: windows-latest
             rid: win-x64
           - os: windows-latest
@@ -172,7 +177,22 @@ jobs:
       - name: Build
         run: dotnet build dotnet-install/src/dotnet-install -c Release
 
+      - name: Publish NativeAOT in cross image
+        if: runner.os == 'Linux'
+        run: |
+          sdk_dir="$(dirname "$(readlink -f "$(command -v dotnet)")")"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/dotnet-install:/src" \
+            -v "$sdk_dir:/host-dotnet:ro" \
+            -w /src \
+            -e DOTNET_ROOT=/host-dotnet \
+            -e PATH="/host-dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+            -e ROOTFS_DIR=${{ matrix.rootfs }} \
+            mcr.microsoft.com/dotnet-buildtools/prereqs:${{ matrix.image }} \
+            sh -c 'git config --global --add safe.directory /src && dotnet publish src/dotnet-install -c Release -r ${{ matrix.rid }} -f net11.0 -p:SysRoot="$ROOTFS_DIR" -p:LinkerFlavor=lld'
+
       - name: Publish NativeAOT
+        if: runner.os != 'Linux'
         run: dotnet publish dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }} -f net11.0
 
       - name: Smoke test
@@ -236,7 +256,17 @@ jobs:
           if-no-files-found: error
 
       - name: Pack linux-x64 AOT package
-        run: dotnet pack dotnet-install/src/dotnet-install -c Release -r linux-x64 -p:TargetFrameworks=net11.0 -p:OfficialAotBuild=true
+        run: |
+          sdk_dir="$(dirname "$(readlink -f "$(command -v dotnet)")")"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/dotnet-install:/src" \
+            -v "$sdk_dir:/host-dotnet:ro" \
+            -w /src \
+            -e DOTNET_ROOT=/host-dotnet \
+            -e PATH="/host-dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+            -e ROOTFS_DIR=/crossrootfs/x64 \
+            mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net11.0-cross-amd64 \
+            sh -c 'git config --global --add safe.directory /src && dotnet pack src/dotnet-install -c Release -r linux-x64 -p:TargetFrameworks=net11.0 -p:OfficialAotBuild=true -p:SysRoot="$ROOTFS_DIR" -p:LinkerFlavor=lld'
 
       - name: Upload linux-x64 package
         uses: actions/upload-artifact@v7
@@ -257,7 +287,9 @@ jobs:
           - rid: win-arm64
             os: windows-latest
           - rid: linux-arm64
-            os: ubuntu-24.04-arm
+            os: ubuntu-26.04
+            image: azurelinux-3.0-net11.0-cross-arm64
+            rootfs: /crossrootfs/arm64
           - rid: osx-arm64
             os: macos-latest
     runs-on: ${{ matrix.os }}
@@ -273,7 +305,22 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Pack RID-specific package
+        if: runner.os != 'Linux'
         run: dotnet pack dotnet-install/src/dotnet-install -c Release -r ${{ matrix.rid }} -p:TargetFrameworks=net11.0 -p:OfficialAotBuild=true
+
+      - name: Pack Linux RID-specific package in cross image
+        if: runner.os == 'Linux'
+        run: |
+          sdk_dir="$(dirname "$(readlink -f "$(command -v dotnet)")")"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/dotnet-install:/src" \
+            -v "$sdk_dir:/host-dotnet:ro" \
+            -w /src \
+            -e DOTNET_ROOT=/host-dotnet \
+            -e PATH="/host-dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+            -e ROOTFS_DIR=${{ matrix.rootfs }} \
+            mcr.microsoft.com/dotnet-buildtools/prereqs:${{ matrix.image }} \
+            sh -c 'git config --global --add safe.directory /src && dotnet pack src/dotnet-install -c Release -r ${{ matrix.rid }} -p:TargetFrameworks=net11.0 -p:OfficialAotBuild=true -p:SysRoot="$ROOTFS_DIR" -p:LinkerFlavor=lld'
 
       - name: Upload RID package
         uses: actions/upload-artifact@v7
